@@ -1,0 +1,44 @@
+---
+# This file contains the ArgoCD installation manifests
+# Source: https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# 
+# For production use, download the latest stable version from:
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#
+# Note: This is a reference file. For actual installation, it's recommended to use the official ArgoCD install manifest
+# or use the kustomize approach for better version control.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Application reconciliation timeout is the max amount of time required to discover if a new manifest is published to the repository
+  timeout.reconciliation: 180s
+  
+  # Add Git repository credentials (if needed)
+  # repositories: |
+  #   - url: https://github.com/yourusername/your-repo
+  #     passwordSecret:
+  #       name: repo-secret
+  #       key: password
+  #     usernameSecret:
+  #       name: repo-secret
+  #       key: username
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cmd-params-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Enable insecure mode for easier local development (disable for production)
+  server.insecure: "true"
