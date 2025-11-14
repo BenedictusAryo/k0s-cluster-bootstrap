@@ -1,0 +1,43 @@
+apiVersion: k0s.k0sproject.io/v1beta1
+kind: ClusterConfig
+metadata:
+  name: k0s
+spec:
+  api:
+    address: 0.0.0.0
+    port: 6443
+    k0sApiPort: 9443
+    sans:
+      - 127.0.0.1
+      - localhost
+  
+  storage:
+    type: etcd
+  
+  network:
+    provider: calico
+    calico:
+      mode: vxlan
+    podCIDR: 10.244.0.0/16
+    serviceCIDR: 10.96.0.0/12
+  
+  podSecurityPolicy:
+    defaultPolicy: 00-k0s-privileged
+  
+  telemetry:
+    enabled: false
+  
+  extensions:
+    helm:
+      repositories:
+        - name: stable
+          url: https://charts.helm.sh/stable
+        - name: bitnami
+          url: https://charts.bitnami.com/bitnami
+      
+      # Uncomment to deploy additional helm charts
+      # charts:
+      #   - name: metrics-server
+      #     chartname: bitnami/metrics-server
+      #     version: "6.0.0"
+      #     namespace: kube-system
