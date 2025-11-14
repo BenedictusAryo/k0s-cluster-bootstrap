@@ -1,16 +1,73 @@
 # k0s-cluster-bootstrap
 
-A comprehensive solution for bootstrapping Kubernetes clusters using [k0s](https://k0sproject.io/) with GitOps practices powered by [ArgoCD](https://argo-cd.readthedocs.io/) and secure secret management using [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets).
+GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), and [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets).
 
-## 📋 Overview
+> 🏡 **Perfect for homelab behind CGNAT or VPS deployments**
+> 
+> This setup works great with:
+> - VPS hosting (DigitalOcean, Hetzner, Linode, etc.)
+> - Homelab servers behind CGNAT (no port forwarding needed!)
+> - Hybrid setups (VPS controller + homelab workers)
+> - Single-node or multi-node clusters
 
-This repository provides automated scripts and manifest files to:
-- Deploy k0s Kubernetes cluster (controller and worker nodes)
-- Set up ArgoCD for GitOps-based cluster management
-- Configure Sealed Secrets for secure secret management
-- Bootstrap your cluster with essential components
+## 💡 Why This Setup?
 
-## 🏗️ Project Structure
+**Traditional Kubernetes challenges**:
+- ❌ Requires static public IP
+- ❌ Complex port forwarding setup
+- ❌ Manual SSL certificate management
+- ❌ Doesn't work behind CGNAT
+- ❌ Heavy resource requirements
+
+**Our solution**:
+- ✅ Works behind CGNAT with Cloudflare Tunnel
+- ✅ No inbound ports needed
+- ✅ Automatic SSL via Cloudflare
+- ✅ GitOps-based deployment
+- ✅ Lightweight k0s (50-70% less resources than full K8s)
+- ✅ Add worker nodes from anywhere
+
+## 📚 Prerequisites
+
+### For Controller Node (VPS recommended)
+- **OS**: Ubuntu 22.04 LTS / Debian 11+ / RHEL 8+
+- **CPU**: 4 cores (vCPU)
+- **RAM**: 8 GB
+- **Storage**: 100 GB SSD
+- **Network**: Public IP or stable connection
+- **Kernel**: Linux 5.4+ (for eBPF support)
+
+### For Worker Nodes (VPS or Homelab)
+- **OS**: Ubuntu 22.04 LTS / Debian 11+ / RHEL 8+
+- **CPU**: 4 cores
+- **RAM**: 8 GB
+- **Storage**: 50 GB SSD
+- **Network**: Outbound internet access (works behind CGNAT!)
+
+### External Requirements
+- Domain managed in Cloudflare DNS (e.g., `benedict-aryo.com`)
+- Git repository for GitOps (this repo)
+- sudo privileges on all nodes
+
+## 🏛️ Architecture
+
+```mermaid
+graph TB
+    Internet[Internet Users] -->|HTTPS| CF[Cloudflare Edge]
+    CF -.->|Tunnel| VPS[VPS Controller<br/>K0s + ArgoCD]
+    CF -.->|Tunnel| HL1[Homelab Worker 1]
+    CF -.->|Tunnel| HL2[Homelab Worker 2]
+    
+    HL1 -.->|Join 6443| VPS
+    HL2 -.->|Join 6443| VPS
+    
+    style CF fill:#f39c12
+    style VPS fill:#3498db
+    style HL1 fill:#2ecc71
+    style HL2 fill:#2ecc71
+```
+
+## 📊 Project Structure
 
 ```
 cluster-bootstrap/
@@ -35,19 +92,32 @@ cluster-bootstrap/
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 🎯 Deployment Scenarios
 
-- Linux-based operating system (Ubuntu 20.04+ recommended)
-- sudo privileges
-- curl installed
-- At least 2GB RAM and 2 CPU cores
+Choose your deployment scenario:
 
-### Step 1: Install k0s Controller
+#### Scenario 1: VPS-Only (Simplest)
+Perfect for getting started quickly with a single VPS or multiple VPS nodes.
 
-On your controller node:
+#### Scenario 2: Hybrid VPS + Homelab (Recommended)
+VPS controller for stability + homelab workers for cost savings. Works great behind CGNAT!
+
+#### Scenario 3: Pure Homelab
+All nodes in homelab (requires one node with stable connection for controller).
+
+---
+
+### 📦 Installation Steps
+
+#### Step 1: Install Prerequisites (All Nodes)
+
+On **every** node (controller and workers):
 
 ```bash
-cd scripts
+git clone https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
+cd k0s-cluster-bootstrap/scripts
+chmod +x *.sh
+./install-prerequisites.sh
 ./install-k0s-controller.sh
 ```
 

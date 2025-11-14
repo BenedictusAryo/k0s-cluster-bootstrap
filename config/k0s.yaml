@@ -1,7 +1,7 @@
 apiVersion: k0s.k0sproject.io/v1beta1
 kind: ClusterConfig
 metadata:
-  name: k0s
+  name: k0s-serverless-cluster
 spec:
   api:
     address: 0.0.0.0
@@ -10,14 +10,15 @@ spec:
     sans:
       - 127.0.0.1
       - localhost
+      # Add your VPS public IP here when deploying
+      # - YOUR_VPS_PUBLIC_IP
   
   storage:
     type: etcd
   
   network:
-    provider: calico
-    calico:
-      mode: vxlan
+    # Use custom CNI - we'll install Cilium via ArgoCD
+    provider: custom
     podCIDR: 10.244.0.0/16
     serviceCIDR: 10.96.0.0/12
   
@@ -25,6 +26,10 @@ spec:
     defaultPolicy: 00-k0s-privileged
   
   telemetry:
+    enabled: false
+  
+  # Disable konnectivity for simpler setup
+  konnectivity:
     enabled: false
   
   extensions:

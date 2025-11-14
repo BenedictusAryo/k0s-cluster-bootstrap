@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cluster-bootstrap
+  name: cluster-serverless
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -9,13 +9,39 @@ spec:
   project: default
   
   source:
-    repoURL: https://github.com/BenedictusAryo/k0s-cluster-bootstrap
-    targetRevision: HEAD
-    path: manifests
+    repoURL: https://github.com/BenedictusAryo/cluster-serverless
+    targetRevision: main
+    path: .
+    helm:
+      values: |
+        global:
+          domain: benedict-aryo.com
+          environment: production
+        
+        cilium:
+          enabled: true
+        
+        knativeServing:
+          enabled: true
+        
+        knativeEventing:
+          enabled: true
+        
+        kourier:
+          enabled: true
+        
+        opentelemetry:
+          enabled: true
+        
+        jaeger:
+          enabled: true
+        
+        cloudflareTunnel:
+          enabled: false  # Configure manually with sealed secrets
   
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: serverless-system
   
   syncPolicy:
     automated:
@@ -24,6 +50,7 @@ spec:
       allowEmpty: false
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true
     retry:
       limit: 5
       backoff:
