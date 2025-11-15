@@ -52,10 +52,35 @@ if [ -f "${CONFIG_FILE}" ]; then
         sudo sed -i "/sans:/a\      - ${PUBLIC_IP}" /etc/k0s/k0s.yaml
     fi
     
-    sudo k0s install controller --config /etc/k0s/k0s.yaml
+    # Ask if this should be a single-node cluster (controller + worker)
+    echo ""
+    echo "🤔 Cluster Configuration"
+    read -p "Enable workloads on this controller node? (single-node cluster) [Y/n]: " ENABLE_WORKER
+    ENABLE_WORKER=${ENABLE_WORKER:-Y}
+    
+    if [[ "$ENABLE_WORKER" =~ ^[Yy]$ ]]; then
+        echo "✅ Installing as single-node cluster (controller + worker)"
+        sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
+    else
+        echo "✅ Installing as controller-only (workers must be added separately)"
+        sudo k0s install controller --config /etc/k0s/k0s.yaml
+    fi
 else
     echo "⚠️  Custom config not found, using default configuration"
-    sudo k0s install controller
+    
+    # Ask if this should be a single-node cluster
+    echo ""
+    echo "🤔 Cluster Configuration"
+    read -p "Enable workloads on this controller node? (single-node cluster) [Y/n]: " ENABLE_WORKER
+    ENABLE_WORKER=${ENABLE_WORKER:-Y}
+    
+    if [[ "$ENABLE_WORKER" =~ ^[Yy]$ ]]; then
+        echo "✅ Installing as single-node cluster (controller + worker)"
+        sudo k0s install controller --enable-worker
+    else
+        echo "✅ Installing as controller-only (workers must be added separately)"
+        sudo k0s install controller
+    fi
 fi
 
 echo ""
