@@ -68,7 +68,8 @@ echo ""
 
 # Install Sealed Secrets Controller
 echo "🔒 Installing Sealed Secrets Controller..."
-kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/latest/download/controller.yaml
+# Using specific version to ensure image availability (GHCR, not Docker Hub bitnami)
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.33.1/controller.yaml
 
 echo "⏳ Waiting for Sealed Secrets controller to be ready..."
 kubectl wait --for=condition=available --timeout=300s deployment -l app.kubernetes.io/name=sealed-secrets -n kube-system || true
