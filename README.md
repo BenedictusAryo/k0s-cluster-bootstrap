@@ -249,31 +249,88 @@ kubectl get secret cloudflare-tunnel-secret -n cloudflare-tunnel
 
 **Note**: Sealed secrets are **safe to commit to Git**! They're encrypted and can only be decrypted by your cluster's Sealed Secrets Controller.
 
-#### Step 3: Configure Public Hostnames
+#### Step 3: Find Service Names for Routing
+
+Before configuring Cloudflare routes, you need to find the internal Kubernetes service names:
+
+```bash
+# List all services to find service names
+kubectl get svc -A
+
+# Get specific service details
+kubectl get svc -n argocd
+kubectl get svc -n kourier-system
+kubectl get svc -n observability
+```
+
+**Understanding Kubernetes DNS format:**
+```
+<service-name>.<namespace>.svc.cluster.local:<port>
+
+Examples:
+- argocd-server.argocd.svc.cluster.local:443
+- kourier.kourier-system.svc.cluster.local:80
+- jaeger-query.observability.svc.cluster.local:16686
+```
+
+**Key services in this setup:**
+- **ArgoCD**: Service `argocd-server` in namespace `argocd`, port `443`
+- **Kourier**: Service `kourier` in namespace `kourier-system`, port `80`
+- **Jaeger**: Service `jaeger-query` in namespace `observability`, port `16686`
+
+#### Step 4: Configure Public Hostnames
 
 In the Cloudflare Zero Trust Dashboard, configure your tunnel routes:
 
 1. **ArgoCD** (for GitOps management):
    - Subdomain: `argocd`
    - Domain: `your-domain.com`
-   - Service: `https://argocd-server.argocd.svc.cluster.local:443`
-   - Additional settings → TLS → Enable **"No TLS Verify"**
+   - Service Type: `HTTPS`
+   - URL: `argocd-server.argocd.svc.cluster.local:443`
+   - Additional settings → TLS → Enable **"No TLS Verify"** ✅
+   
+   **Why "No TLS Verify"?** ArgoCD uses self-signed certificates internally. This setting tells Cloudflare Tunnel to trust the internal certificate. Your traffic is still encrypted end-to-end.
 
 2. **Jaeger** (optional, for observability):
    - Subdomain: `jaeger`
    - Domain: `your-domain.com`
-   - Service: `http://jaeger-query.observability.svc.cluster.local:16686`
+   - Service Type: `HTTP`
+   - URL: `jaeger-query.observability.svc.cluster.local:16686`
 
 3. **Knative Services** (wildcard for all apps):
    - Subdomain: `*` (wildcard)
    - Domain: `your-domain.com`
-   - Service: `http://kourier-gateway.kourier-system.svc.cluster.local:80`
+   - Service Type: `HTTP`
+   - URL: `kourier.kourier-system.svc.cluster.local:80`
 
 4. **Catch-all rule**: `http_status:404`
 
-**Route Order Matters**: Place specific routes (argocd, jaeger) before the wildcard route.
+**Important Notes**:
+- ⚠️ **Route Order Matters**: Place specific routes (argocd, jaeger) BEFORE the wildcard route
+- ✅ The wildcard route handles all Knative services (e.g., `hello.your-domain.com`, `api.your-domain.com`)
+- ✅ These URLs use Kubernetes internal DNS - they only work from inside the cluster (where the tunnel pod runs)
 
-#### Step 4: Enable Cloudflare Tunnel in Helm Chart
+#### Step 5: Create DNS Records
+
+In the Cloudflare DNS dashboard (not Zero Trust):
+
+1. Add CNAME record for ArgoCD:
+   - **Type**: `CNAME`
+   - **Name**: `argocd`
+   - **Target**: `<your-tunnel-id>.cfargotunnel.com` (find this in your tunnel settings)
+   - **Proxy status**: ✅ Proxied (orange cloud)
+
+2. Add CNAME record for Jaeger (optional):
+   - **Name**: `jaeger`
+   - **Target**: `<your-tunnel-id>.cfargotunnel.com`
+   - **Proxy status**: ✅ Proxied
+
+3. Add wildcard CNAME for Knative services:
+   - **Name**: `*`
+   - **Target**: `<your-tunnel-id>.cfargotunnel.com`
+   - **Proxy status**: ✅ Proxied
+
+#### Step 6: Enable Cloudflare Tunnel in Helm Chart
 
 After creating the sealed secret, enable the tunnel in your cluster-serverless infrastructure:
 
@@ -285,18 +342,20 @@ cloudflareTunnel:
 
 Commit and push the change. ArgoCD will automatically deploy the tunnel pods.
 
-#### Step 5: Verify Tunnel Deployment
+#### Step 7: Verify Tunnel Deployment
 
 ```bash
 # Check tunnel pods are running
 kubectl get pods -n cloudflare-tunnel
 
 # Check tunnel logs
-kubectl logs -n cloudflare-tunnel -l app=cloudflare-tunnel
+kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel
 
-# Test access
-curl https://argocd.your-domain.com
+# Test access from your browser
+# Visit: https://argocd.your-domain.com
 ```
+
+**Expected result**: You should see the ArgoCD login page! 🎉
 
 #### Why Deploy Tunnel in Kubernetes vs System Service?
 
