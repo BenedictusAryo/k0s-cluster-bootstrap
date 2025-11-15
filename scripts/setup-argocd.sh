@@ -57,9 +57,10 @@ fi
 # Install Cilium with minimal configuration for VPS/homelab
 echo "   Installing Cilium to cluster..."
 cilium install \
-    --set kubeProxyReplacement=strict \
+    --set kubeProxyReplacement=false \
     --set k8sServiceHost=localhost \
-    --set k8sServicePort=6443
+    --set k8sServicePort=6443 \
+    --version 1.18.4
 
 echo "⏳ Waiting for Cilium to be ready (this may take 2-3 minutes)..."
 cilium status --wait --wait-duration=5m
