@@ -1,20 +1,16 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cluster-serverless-infra
+  name: root-app
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/BenedictusAryo/cluster-serverless.git
+    repoURL: https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
     targetRevision: main
-    path: infra
-    helm:
-      releaseName: cluster-serverless-infra
-      valueFiles:
-        - values.yaml
+    path: manifests/applications
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
@@ -22,5 +18,3 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true

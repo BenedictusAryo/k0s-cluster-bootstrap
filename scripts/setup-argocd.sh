@@ -38,45 +38,6 @@ echo "✅ Cluster is accessible"
 kubectl get nodes
 echo ""
 
-# Install Cilium CNI first (required for pod networking)
-echo "🌐 Installing Cilium CNI..."
-echo "   This is required for pod networking since we use custom CNI"
-
-# Install Cilium CLI if not present
-if ! command -v cilium &> /dev/null; then
-    echo "   Installing Cilium CLI..."
-    CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
-    CLI_ARCH=amd64
-    if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
-    curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
-    sha256sum --check cilium-linux-${CLI_ARCH}.tar.gz.sha256sum
-    sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
-    rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
-fi
-
-# Install Cilium with minimal configuration for VPS/homelab
-echo "   Installing Cilium to cluster..."
-cilium install \
-    --set kubeProxyReplacement=false \
-    --set k8sServiceHost=localhost \
-    --set k8sServicePort=6443 \
-    --version 1.18.4
-
-echo "⏳ Waiting for Cilium to be ready (this may take 2-3 minutes)..."
-cilium status --wait --wait-duration=5m
-echo "✅ Cilium CNI is ready"
-echo ""
-
-# Install Sealed Secrets Controller
-echo "🔒 Installing Sealed Secrets Controller..."
-# Using specific version to ensure image availability (GHCR, not Docker Hub bitnami)
-kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.33.1/controller.yaml
-
-echo "⏳ Waiting for Sealed Secrets controller to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment -l app.kubernetes.io/name=sealed-secrets -n kube-system || true
-echo "✅ Sealed Secrets controller is ready"
-echo ""
-
 # Create ArgoCD namespace
 echo "📦 Creating ArgoCD namespace..."
 kubectl apply -f "${MANIFESTS_DIR}/argocd/namespace.yaml"
@@ -93,11 +54,15 @@ echo ""
 # Wait a bit more for all ArgoCD components
 sleep 10
 
-# Deploy cluster-serverless application
-echo "📦 Deploying cluster-serverless application via ArgoCD..."
-kubectl apply -f "${MANIFESTS_DIR}/argocd/cluster-bootstrap-app.yaml"
-echo "✅ Cluster-serverless application configured"
+# Deploy cluster-serverless infra (App-of-Apps pattern)
+echo "📦 Deploying cluster-serverless infrastructure via ArgoCD..."
+kubectl apply -f "${MANIFESTS_DIR}/argocd/cluster-serverless-app.yaml"
+echo "✅ Cluster-serverless infra app configured"
 echo ""
+
+echo "⏳ Waiting for ArgoCD to sync infrastructure applications..."
+echo "   This will deploy: Cilium, Sealed Secrets, Knative, Kourier, OpenTelemetry, Jaeger"
+sleep 10
 
 # Get ArgoCD admin password
 echo "========================================"
