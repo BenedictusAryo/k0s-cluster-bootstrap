@@ -28,10 +28,6 @@ spec:
   telemetry:
     enabled: false
   
-  # Disable konnectivity for simpler setup
-  konnectivity:
-    enabled: false
-  
   extensions:
     helm:
       repositories:
