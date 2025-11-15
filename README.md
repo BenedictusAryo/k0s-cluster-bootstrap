@@ -209,6 +209,106 @@ kubectl apply -f secrets/my-sealed-secret.yaml
 
 4. Commit only the sealed secret to Git (never commit the unsealed version)
 
+### Setting up Cloudflare Tunnel (Required for App Access)
+
+Cloudflare Tunnel provides secure access to your applications without exposing ports to the internet.
+
+#### Step 1: Create Cloudflare Tunnel
+
+1. Log in to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
+2. Navigate to **Networks** → **Tunnels**
+3. Click **Create a tunnel**
+4. Choose **Cloudflared** as the connector type
+5. Name your tunnel (e.g., `k0s-cluster-tunnel`)
+6. Copy the tunnel token (starts with `eyJh...`)
+
+#### Step 2: Create Kubernetes Secret
+
+**IMPORTANT**: Deploy the tunnel **inside Kubernetes**, not as a system service. This ensures it works across all deployment scenarios (VPS, Hybrid, Homelab).
+
+```bash
+# Create the cloudflare-tunnel namespace
+kubectl create namespace cloudflare-tunnel
+
+# Create and seal the secret in one step (no plain secret stored!)
+kubectl create secret generic cloudflare-tunnel-secret \
+  --from-literal=tunnel-token="eyJhIjoiMDJkYjBlMDJjODNiMjg0MGIyZWM3NGM4MjAxNWQ1YW..." \
+  -n cloudflare-tunnel \
+  --dry-run=client -o yaml | \
+  kubeseal -o yaml > secrets/sealed-secrets/cloudflare-tunnel-sealed.yaml
+
+# Apply the sealed secret
+kubectl apply -f secrets/sealed-secrets/cloudflare-tunnel-sealed.yaml
+
+# Verify the secret was created
+kubectl get secret cloudflare-tunnel-secret -n cloudflare-tunnel
+```
+
+#### Step 3: Configure Public Hostnames
+
+In the Cloudflare Zero Trust Dashboard, configure your tunnel routes:
+
+1. **ArgoCD** (for GitOps management):
+   - Subdomain: `argocd`
+   - Domain: `your-domain.com`
+   - Service: `https://argocd-server.argocd.svc.cluster.local:443`
+   - Additional settings → TLS → Enable **"No TLS Verify"**
+
+2. **Jaeger** (optional, for observability):
+   - Subdomain: `jaeger`
+   - Domain: `your-domain.com`
+   - Service: `http://jaeger-query.observability.svc.cluster.local:16686`
+
+3. **Knative Services** (wildcard for all apps):
+   - Subdomain: `*` (wildcard)
+   - Domain: `your-domain.com`
+   - Service: `http://kourier-gateway.kourier-system.svc.cluster.local:80`
+
+4. **Catch-all rule**: `http_status:404`
+
+**Route Order Matters**: Place specific routes (argocd, jaeger) before the wildcard route.
+
+#### Step 4: Enable Cloudflare Tunnel in Helm Chart
+
+After creating the sealed secret, enable the tunnel in your cluster-serverless infrastructure:
+
+```bash
+# Edit infra/values.yaml in cluster-serverless repo
+cloudflareTunnel:
+  enabled: true  # Change from false to true
+```
+
+Commit and push the change. ArgoCD will automatically deploy the tunnel pods.
+
+#### Step 5: Verify Tunnel Deployment
+
+```bash
+# Check tunnel pods are running
+kubectl get pods -n cloudflare-tunnel
+
+# Check tunnel logs
+kubectl logs -n cloudflare-tunnel -l app=cloudflare-tunnel
+
+# Test access
+curl https://argocd.your-domain.com
+```
+
+#### Why Deploy Tunnel in Kubernetes vs System Service?
+
+**✅ Kubernetes Deployment (Recommended)**:
+- Works across all scenarios (VPS, Hybrid, Homelab)
+- Uses cluster DNS (e.g., `argocd-server.argocd.svc.cluster.local`)
+- High availability (multiple replicas)
+- Survives node restarts
+- GitOps managed
+
+**❌ System Service (Not Recommended)**:
+- Only works on single node
+- Can't use cluster DNS names
+- Requires NodePort or port-forwarding
+- Manual configuration on each node
+- Not GitOps managed
+
 ## 📖 Configuration
 
 ### K0s Configuration
