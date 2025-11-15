@@ -52,35 +52,79 @@ if [ -f "${CONFIG_FILE}" ]; then
         sudo sed -i "/sans:/a\      - ${PUBLIC_IP}" /etc/k0s/k0s.yaml
     fi
     
-    # Ask if this should be a single-node cluster (controller + worker)
+    # Ask about cluster topology
     echo ""
     echo "🤔 Cluster Configuration"
-    read -p "Enable workloads on this controller node? (single-node cluster) [Y/n]: " ENABLE_WORKER
-    ENABLE_WORKER=${ENABLE_WORKER:-Y}
+    echo "1) Single-node cluster (controller + worker, no additional nodes planned)"
+    echo "2) Multi-node cluster with controller also running workloads"
+    echo "3) Multi-node cluster with controller dedicated (no workloads on controller)"
+    read -p "Select cluster type [1/2/3] (default: 1): " CLUSTER_TYPE
+    CLUSTER_TYPE=${CLUSTER_TYPE:-1}
     
-    if [[ "$ENABLE_WORKER" =~ ^[Yy]$ ]]; then
-        echo "✅ Installing as single-node cluster (controller + worker)"
-        sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
-    else
-        echo "✅ Installing as controller-only (workers must be added separately)"
-        sudo k0s install controller --config /etc/k0s/k0s.yaml
-    fi
+    case "$CLUSTER_TYPE" in
+        1)
+            echo "✅ Installing as single-node cluster (controller + worker)"
+            ENABLE_WORKER="Y"
+            REMOVE_TAINT="Y"
+            sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
+            ;;
+        2)
+            echo "✅ Installing as multi-node cluster with controller running workloads"
+            ENABLE_WORKER="Y"
+            REMOVE_TAINT="Y"
+            sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
+            ;;
+        3)
+            echo "✅ Installing as controller-only (dedicated, no workloads)"
+            ENABLE_WORKER="N"
+            REMOVE_TAINT="N"
+            sudo k0s install controller --config /etc/k0s/k0s.yaml
+            ;;
+        *)
+            echo "⚠️  Invalid selection, defaulting to single-node cluster"
+            ENABLE_WORKER="Y"
+            REMOVE_TAINT="Y"
+            sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
+            ;;
+    esac
 else
     echo "⚠️  Custom config not found, using default configuration"
     
-    # Ask if this should be a single-node cluster
+    # Ask about cluster topology
     echo ""
     echo "🤔 Cluster Configuration"
-    read -p "Enable workloads on this controller node? (single-node cluster) [Y/n]: " ENABLE_WORKER
-    ENABLE_WORKER=${ENABLE_WORKER:-Y}
+    echo "1) Single-node cluster (controller + worker, no additional nodes planned)"
+    echo "2) Multi-node cluster with controller also running workloads"
+    echo "3) Multi-node cluster with controller dedicated (no workloads on controller)"
+    read -p "Select cluster type [1/2/3] (default: 1): " CLUSTER_TYPE
+    CLUSTER_TYPE=${CLUSTER_TYPE:-1}
     
-    if [[ "$ENABLE_WORKER" =~ ^[Yy]$ ]]; then
-        echo "✅ Installing as single-node cluster (controller + worker)"
-        sudo k0s install controller --enable-worker
-    else
-        echo "✅ Installing as controller-only (workers must be added separately)"
-        sudo k0s install controller
-    fi
+    case "$CLUSTER_TYPE" in
+        1)
+            echo "✅ Installing as single-node cluster (controller + worker)"
+            ENABLE_WORKER="Y"
+            REMOVE_TAINT="Y"
+            sudo k0s install controller --enable-worker
+            ;;
+        2)
+            echo "✅ Installing as multi-node cluster with controller running workloads"
+            ENABLE_WORKER="Y"
+            REMOVE_TAINT="Y"
+            sudo k0s install controller --enable-worker
+            ;;
+        3)
+            echo "✅ Installing as controller-only (dedicated, no workloads)"
+            ENABLE_WORKER="N"
+            REMOVE_TAINT="N"
+            sudo k0s install controller
+            ;;
+        *)
+            echo "⚠️  Invalid selection, defaulting to single-node cluster"
+            ENABLE_WORKER="Y"
+            REMOVE_TAINT="Y"
+            sudo k0s install controller --enable-worker
+            ;;
+    esac
 fi
 
 echo ""
@@ -115,6 +159,23 @@ sudo k0s kubeconfig admin > ~/.kube/config
 chmod 600 ~/.kube/config
 echo "✅ Kubeconfig saved to ~/.kube/config"
 echo ""
+
+# Remove control-plane taint if needed
+if [[ "$REMOVE_TAINT" == "Y" ]]; then
+    echo "🔓 Removing control-plane taint (controller will run workloads)..."
+    # Wait a bit for node to be fully registered
+    sleep 5
+    if kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null; then
+        echo "✅ Control-plane taint removed - workloads can now schedule"
+    else
+        echo "⚠️  No taint to remove (already removed or not present)"
+    fi
+    echo ""
+else
+    echo "ℹ️  Controller node will NOT run workloads (taint preserved)"
+    echo "   Add worker nodes using the join token below"
+    echo ""
+fi
 
 # Generate worker join token
 echo "🎫 Generating worker join token..."
