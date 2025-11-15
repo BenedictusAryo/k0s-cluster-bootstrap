@@ -4,7 +4,6 @@ metadata:
   name: k0s-serverless-cluster
 spec:
   api:
-    address: 0.0.0.0
     port: 6443
     k0sApiPort: 9443
     sans:
