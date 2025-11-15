@@ -1,0 +1,29 @@
+# Ignore ONLY unsealed (plain) secrets
+# Sealed secrets are safe to commit!
+secrets/examples/*.yaml
+!secrets/examples/*.example
+
+# Ignore any plain YAML files in root secrets directory
+secrets/*.yaml
+secrets/*.yml
+
+# But DO commit sealed secrets
+!manifests/sealed-secrets/secrets/*-sealed.yaml
+
+# Kubernetes config
+*.kubeconfig
+kubeconfig
+
+# k0s
+*.token
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

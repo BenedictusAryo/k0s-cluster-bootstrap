@@ -81,7 +81,9 @@ cluster-bootstrap/
 │   │   ├── argocd-install.yaml          # ArgoCD configuration
 │   │   └── cluster-bootstrap-app.yaml   # Bootstrap application
 │   └── sealed-secrets/
-│       └── controller.yaml              # Sealed Secrets controller
+│       ├── controller.yaml              # Sealed Secrets controller
+│       └── secrets/
+│           └── *-sealed.yaml            # Sealed secrets (safe to commit!)
 ├── config/
 │   └── k0s.yaml                         # K0s cluster configuration
 ├── secrets/
@@ -235,14 +237,16 @@ kubectl create secret generic cloudflare-tunnel-secret \
   --from-literal=tunnel-token="eyJhIjoiMDJkYjBlMDJjODNiMjg0MGIyZWM3NGM4MjAxNWQ1YW..." \
   -n cloudflare-tunnel \
   --dry-run=client -o yaml | \
-  kubeseal -o yaml > secrets/sealed-secrets/cloudflare-tunnel-sealed.yaml
+  kubeseal -o yaml > manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
 
 # Apply the sealed secret
-kubectl apply -f secrets/sealed-secrets/cloudflare-tunnel-sealed.yaml
+kubectl apply -f manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
 
 # Verify the secret was created
 kubectl get secret cloudflare-tunnel-secret -n cloudflare-tunnel
 ```
+
+**Note**: Sealed secrets are **safe to commit to Git**! They're encrypted and can only be decrypted by your cluster's Sealed Secrets Controller.
 
 #### Step 3: Configure Public Hostnames
 
