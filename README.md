@@ -237,7 +237,8 @@ kubectl create secret generic cloudflare-tunnel-secret \
   --from-literal=tunnel-token="eyJhIjoiMDJkYjBlMDJjODNiMjg0MGIyZWM3NGM4MjAxNWQ1YW..." \
   -n cloudflare-tunnel \
   --dry-run=client -o yaml | \
-  kubeseal -o yaml > manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
+  kubeseal --controller-name=sealed-secrets --controller-namespace=kube-system \
+  -o yaml > manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
 
 # Apply the sealed secret
 kubectl apply -f manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
