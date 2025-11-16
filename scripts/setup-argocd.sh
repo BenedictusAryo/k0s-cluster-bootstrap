@@ -76,20 +76,20 @@ echo ""
 echo "📦 Installing Knative Operator v1.17.1..."
 kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.17.1/operator.yaml
 
-# Wait for namespace to be created first
-echo "⏳ Waiting for knative-operator namespace..."
-for i in {1..30}; do
-    if kubectl get namespace knative-operator &>/dev/null; then
-        break
+echo "⏳ Waiting for Knative Operator to be ready..."
+# Wait for the deployment to exist and be available
+for i in {1..60}; do
+    if kubectl get deployment operator -n knative-operator &>/dev/null; then
+        if kubectl wait --for=condition=available --timeout=10s deployment/operator -n knative-operator &>/dev/null; then
+            break
+        fi
     fi
-    sleep 2
+    echo "   Waiting for operator deployment... ($i/60)"
+    sleep 3
 done
 
-echo "⏳ Waiting for Knative Operator to be ready..."
-kubectl wait --for=condition=available --timeout=180s deployment/operator -n knative-operator 2>/dev/null || {
-    echo "   Deployment not ready yet, waiting for pods..."
-    kubectl wait --for=condition=ready --timeout=180s pod -l app=operator -n knative-operator
-}
+# Verify it's actually ready
+kubectl get deployment operator -n knative-operator
 echo "✅ Knative Operator is ready"
 echo ""
 
