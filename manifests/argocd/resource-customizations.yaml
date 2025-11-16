@@ -1,3 +1,23 @@
+# ArgoCD Resource Customizations
+# 
+# This ConfigMap teaches ArgoCD how to assess health for Custom Resources.
+# 
+# Why is this needed?
+# - ArgoCD natively understands built-in K8s resources (Deployment, Service, Pod, etc.)
+# - For CRDs, ArgoCD doesn't know what "healthy" means by default
+# - Without health checks, ArgoCD shows resources as having "null" health status
+# - This causes applications to stay in "Progressing" state indefinitely
+#
+# How it works:
+# - Each resource type gets a Lua script that examines the resource's status
+# - The script returns: Healthy, Progressing, Degraded, or Suspended
+# - ArgoCD evaluates these scripts every time it reconciles the application
+#
+# Naming convention:
+# - Key format: resource.customizations.health.<group>_<Kind>
+# - Group uses underscores instead of dots (operator.knative.dev → operator.knative.dev)
+# - The script is written in Lua (ArgoCD's embedded scripting language)
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,71 +27,168 @@ metadata:
     app.kubernetes.io/name: argocd-cm
     app.kubernetes.io/part-of: argocd
 data:
-  # Health check for KnativeServing
+  # ============================================================================
+  # KnativeServing Health Check
+  # ============================================================================
+  # Group: operator.knative.dev, Kind: KnativeServing
+  # 
+  # KnativeServing is a CR managed by Knative Operator that deploys:
+  # - Activator (scales from zero)
+  # - Autoscaler (KPA - Knative Pod Autoscaler)
+  # - Controller (manages Knative Services)
+  # - Webhook (validates configurations)
+  # - Net-Kourier-Controller (ingress controller)
+  #
+  # Health logic:
+  # 1. Check if .status.conditions exists
+  # 2. Look for condition with type="Ready"
+  # 3. If Ready=True → Healthy
+  # 4. If Ready=False → Degraded (show reason)
+  # 5. If no Ready condition → Progressing (still deploying)
   resource.customizations.health.operator.knative.dev_KnativeServing: |
     hs = {}
-    if obj.status ~= nil then
-      if obj.status.conditions ~= nil then
-        for i, condition in ipairs(obj.status.conditions) do
-          if condition.type == "Ready" and condition.status == "True" then
+    
+    -- No status yet means resource just created
+    if obj.status == nil then
+      hs.status = "Progressing"
+      hs.message = "KnativeServing resource created, waiting for operator"
+      return hs
+    end
+    
+    -- Check conditions array
+    if obj.status.conditions ~= nil then
+      for i, condition in ipairs(obj.status.conditions) do
+        
+        -- Ready condition indicates overall health
+        if condition.type == "Ready" then
+          if condition.status == "True" then
             hs.status = "Healthy"
-            hs.message = "KnativeServing is ready"
+            hs.message = "All Knative Serving components are ready"
             return hs
-          end
-          if condition.type == "Ready" and condition.status == "False" then
+          elseif condition.status == "False" then
             hs.status = "Degraded"
-            hs.message = condition.message or "KnativeServing is not ready"
+            hs.message = condition.message or condition.reason or "KnativeServing is not ready"
+            return hs
+          elseif condition.status == "Unknown" then
+            hs.status = "Progressing"
+            hs.message = "KnativeServing status unknown - components deploying"
             return hs
           end
         end
       end
     end
+    
+    -- Fallback: conditions exist but no Ready condition found
     hs.status = "Progressing"
-    hs.message = "Waiting for KnativeServing to be ready"
+    hs.message = "Waiting for KnativeServing Ready condition"
     return hs
 
-  # Health check for KnativeEventing
+  # ============================================================================
+  # KnativeEventing Health Check
+  # ============================================================================
+  # Group: operator.knative.dev, Kind: KnativeEventing
+  # 
+  # KnativeEventing is a CR managed by Knative Operator that deploys:
+  # - Eventing Controller (manages event flows)
+  # - Eventing Webhook (validates event resources)
+  # - IMC Controller (In-Memory Channel)
+  # - IMC Dispatcher (routes events)
+  # - MT Broker components (multi-tenant event broker)
+  #
+  # Health logic: Same as KnativeServing
   resource.customizations.health.operator.knative.dev_KnativeEventing: |
     hs = {}
-    if obj.status ~= nil then
-      if obj.status.conditions ~= nil then
-        for i, condition in ipairs(obj.status.conditions) do
-          if condition.type == "Ready" and condition.status == "True" then
+    
+    if obj.status == nil then
+      hs.status = "Progressing"
+      hs.message = "KnativeEventing resource created, waiting for operator"
+      return hs
+    end
+    
+    if obj.status.conditions ~= nil then
+      for i, condition in ipairs(obj.status.conditions) do
+        if condition.type == "Ready" then
+          if condition.status == "True" then
             hs.status = "Healthy"
-            hs.message = "KnativeEventing is ready"
+            hs.message = "All Knative Eventing components are ready"
             return hs
-          end
-          if condition.type == "Ready" and condition.status == "False" then
+          elseif condition.status == "False" then
             hs.status = "Degraded"
-            hs.message = condition.message or "KnativeEventing is not ready"
+            hs.message = condition.message or condition.reason or "KnativeEventing is not ready"
+            return hs
+          elseif condition.status == "Unknown" then
+            hs.status = "Progressing"
+            hs.message = "KnativeEventing status unknown - components deploying"
             return hs
           end
         end
       end
     end
+    
     hs.status = "Progressing"
-    hs.message = "Waiting for KnativeEventing to be ready"
+    hs.message = "Waiting for KnativeEventing Ready condition"
     return hs
 
-  # Health check for SealedSecret
+  # ============================================================================
+  # SealedSecret Health Check
+  # ============================================================================
+  # Group: bitnami.com, Kind: SealedSecret
+  # 
+  # SealedSecret is encrypted secret stored in Git that gets decrypted by
+  # the sealed-secrets-controller into a regular Kubernetes Secret.
+  #
+  # Lifecycle:
+  # 1. SealedSecret created in cluster (from Git)
+  # 2. Controller sees it and attempts decryption
+  # 3. If successful → creates/updates Secret → Synced=True
+  # 4. If failed (wrong key, corrupted data) → Synced=False
+  #
+  # Health logic:
+  # - Synced=True → Secret successfully created
+  # - Synced=False → Decryption failed (show error)
+  # - No condition → Still processing
   resource.customizations.health.bitnami.com_SealedSecret: |
     hs = {}
-    if obj.status ~= nil then
-      if obj.status.conditions ~= nil then
-        for i, condition in ipairs(obj.status.conditions) do
-          if condition.type == "Synced" and condition.status == "True" then
+    
+    if obj.status == nil then
+      hs.status = "Progressing"
+      hs.message = "SealedSecret created, waiting for controller to decrypt"
+      return hs
+    end
+    
+    if obj.status.conditions ~= nil then
+      for i, condition in ipairs(obj.status.conditions) do
+        if condition.type == "Synced" then
+          if condition.status == "True" then
             hs.status = "Healthy"
-            hs.message = "SealedSecret is synced"
+            hs.message = "Secret decrypted and synchronized"
             return hs
-          end
-          if condition.type == "Synced" and condition.status == "False" then
+          elseif condition.status == "False" then
             hs.status = "Degraded"
-            hs.message = condition.message or "SealedSecret sync failed"
+            hs.message = condition.message or "Failed to decrypt - wrong cluster key?"
             return hs
           end
         end
       end
     end
+    
     hs.status = "Progressing"
-    hs.message = "Waiting for SealedSecret to sync"
+    hs.message = "Waiting for sealed-secrets-controller to process"
     return hs
+
+  # ============================================================================
+  # Additional Resource Customizations
+  # ============================================================================
+  
+  # Ignore differences in metadata.managedFields (Kubernetes internal field)
+  # This prevents sync loops caused by server-side apply
+  resource.compareoptions: |
+    ignoreAggregatedRoles: true
+    
+  # Diff customization: ignore certain fields that are auto-generated
+  resource.customizations.ignoreDifferences.all: |
+    jqPathExpressions:
+    - .metadata.managedFields
+    - .metadata.resourceVersion
+    - .metadata.generation
+    - .metadata.uid
