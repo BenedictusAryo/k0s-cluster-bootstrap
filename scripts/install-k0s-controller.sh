@@ -164,12 +164,21 @@ echo ""
 if [[ "$REMOVE_TAINT" == "Y" ]]; then
     echo "🔓 Removing control-plane taint (controller will run workloads)..."
     # Wait a bit for node to be fully registered
-    sleep 5
-    if kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null; then
-        echo "✅ Control-plane taint removed - workloads can now schedule"
-    else
-        echo "⚠️  No taint to remove (already removed or not present)"
-    fi
+    sleep 10
+    
+    # Try multiple times as the taint might not be applied immediately
+    for i in {1..10}; do
+        if sudo k0s kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null; then
+            echo "✅ Control-plane taint removed - workloads can now schedule"
+            break
+        elif sudo k0s kubectl get nodes -o json | grep -q "node-role.kubernetes.io/control-plane"; then
+            echo "   Attempt $i: Taint not ready yet, waiting..."
+            sleep 3
+        else
+            echo "⚠️  No taint to remove (already removed or not present)"
+            break
+        fi
+    done
     echo ""
 else
     echo "ℹ️  Controller node will NOT run workloads (taint preserved)"
