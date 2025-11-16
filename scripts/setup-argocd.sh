@@ -54,13 +54,18 @@ if ! command -v cilium &> /dev/null; then
     rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 fi
 
-# Install Cilium with minimal configuration
-echo "   Installing Cilium to cluster..."
-cilium install \
-    --set kubeProxyReplacement=false \
-    --set k8sServiceHost=localhost \
-    --set k8sServicePort=6443 \
-    --version 1.18.4
+# Check if Cilium is already installed
+if cilium status &>/dev/null; then
+    echo "✅ Cilium is already installed"
+else
+    # Install Cilium with minimal configuration
+    echo "   Installing Cilium to cluster..."
+    cilium install \
+        --set kubeProxyReplacement=false \
+        --set k8sServiceHost=localhost \
+        --set k8sServicePort=6443 \
+        --version 1.18.4
+fi
 
 echo "⏳ Waiting for Cilium to be ready..."
 cilium status --wait --wait-duration=5m
