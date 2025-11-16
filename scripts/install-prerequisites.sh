@@ -335,10 +335,18 @@ echo ""
 # --- Install ArgoCD CLI ---
 echo "--- 8/8: Installing ArgoCD CLI ---"
 if ! command -v argocd &> /dev/null; then
-    ARGOCD_VERSION=$(curl -s https://api.github.com/repos/argoproj/argo-cd/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")' | tr -d '"')
+    # Get latest version using jq if available, otherwise grep
+    if command -v jq &> /dev/null; then
+        ARGOCD_VERSION=$(curl -s https://api.github.com/repos/argoproj/argo-cd/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+    else
+        ARGOCD_VERSION=$(curl -s https://api.github.com/repos/argoproj/argo-cd/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")' | tr -d '"v')
+    fi
+    
     CLI_ARCH=amd64
     if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
-    curl -L "https://github.com/argoproj/argo-cd/releases/download/v${ARGOCD_VERSION}/argocd-linux-${CLI_ARCH}" -o argocd
+    
+    echo "Downloading ArgoCD CLI version ${ARGOCD_VERSION}..."
+    curl -sSL "https://github.com/argoproj/argo-cd/releases/download/v${ARGOCD_VERSION}/argocd-linux-${CLI_ARCH}" -o argocd
     chmod +x argocd
     install -o root -g root -m 0755 argocd /usr/local/bin/
     rm argocd
