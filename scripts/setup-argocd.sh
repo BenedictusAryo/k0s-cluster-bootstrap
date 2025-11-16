@@ -71,7 +71,7 @@ echo ""
 echo "📦 Installing Knative Operator v1.17.1..."
 kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.17.1/operator.yaml
 echo "⏳ Waiting for Knative Operator to be ready..."
-kubectl wait --for=condition=available --timeout=180s deployment/knative-operator -n default
+kubectl wait --for=condition=available --timeout=180s deployment/operator -n knative-operator
 echo "✅ Knative Operator is ready"
 echo ""
 
