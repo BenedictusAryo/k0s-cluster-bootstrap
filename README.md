@@ -1,14 +1,16 @@
 # k0s-cluster-bootstrap
 
-GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), and [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets).
+GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), [Knative](https://knative.dev/), and [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets).
 
-> 🏡 **Perfect for homelab behind CGNAT or VPS deployments**
+> 🏡 **Serverless Platform for VPS/Homelab with Full GitOps**
 > 
-> This setup works great with:
-> - VPS hosting (DigitalOcean, Hetzner, Linode, etc.)
-> - Homelab servers behind CGNAT (no port forwarding needed!)
-> - Hybrid setups (VPS controller + homelab workers)
-> - Single-node or multi-node clusters
+> This setup provides:
+> - **Knative Serving**: Serverless request-driven workloads (scale-to-zero)
+> - **Knative Eventing**: Event-driven architecture
+> - **App-of-Apps Pattern**: Self-healing infrastructure management
+> - **Cloudflare Tunnel**: Secure access without exposed ports
+> - **Observability Stack**: OpenTelemetry + Jaeger tracing
+> - Works behind CGNAT, VPS, or hybrid deployments
 
 ## 💡 Why This Setup?
 
@@ -18,14 +20,17 @@ GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments usin
 - ❌ Manual SSL certificate management
 - ❌ Doesn't work behind CGNAT
 - ❌ Heavy resource requirements
+- ❌ Manual infrastructure management
 
 **Our solution**:
+- ✅ **Serverless Platform**: Knative for scale-to-zero workloads
+- ✅ **App-of-Apps GitOps**: cluster-init manages all infrastructure
+- ✅ **Self-Healing**: Delete any app, it auto-recreates via GitOps
 - ✅ Works behind CGNAT with Cloudflare Tunnel
 - ✅ No inbound ports needed
 - ✅ Automatic SSL via Cloudflare
-- ✅ GitOps-based deployment
+- ✅ Full observability with OpenTelemetry + Jaeger
 - ✅ Lightweight k0s (50-70% less resources than full K8s)
-- ✅ Add worker nodes from anywhere
 
 ## 📚 Prerequisites
 
@@ -54,9 +59,15 @@ GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments usin
 ```mermaid
 graph TB
     Internet[Internet Users] -->|HTTPS| CF[Cloudflare Edge]
-    CF -.->|Tunnel| VPS[VPS Controller<br/>K0s + ArgoCD]
+    CF -.->|Tunnel| VPS[VPS Controller<br/>K0s + ArgoCD + Knative]
     CF -.->|Tunnel| HL1[Homelab Worker 1]
     CF -.->|Tunnel| HL2[Homelab Worker 2]
+    
+    VPS -->|App-of-Apps| ARGOCD[ArgoCD cluster-init]
+    ARGOCD -->|Manages| INFRA[cluster-serverless-infra]
+    INFRA -->|Deploys| KNATIVE[Knative Serving/Eventing]
+    INFRA -->|Deploys| OBS[OpenTelemetry + Jaeger]
+    INFRA -->|Deploys| CILIUM[Cilium CNI]
     
     HL1 -.->|Join 6443| VPS
     HL2 -.->|Join 6443| VPS
@@ -65,83 +76,196 @@ graph TB
     style VPS fill:#3498db
     style HL1 fill:#2ecc71
     style HL2 fill:#2ecc71
+    style ARGOCD fill:#e74c3c
+    style INFRA fill:#9b59b6
+    style KNATIVE fill:#1abc9c
 ```
 
 ## 📊 Project Structure
 
 ```
-cluster-bootstrap/
+k0s-cluster-bootstrap/
 ├── scripts/
-│   ├── install-k0s-controller.sh  # Install k0s controller node
-│   ├── install-k0s-worker.sh      # Install k0s worker node
-│   └── setup-argocd.sh            # Deploy ArgoCD
+│   ├── install-prerequisites.sh       # Install Helm, kubeseal
+│   ├── install-k0s-controller.sh      # Install k0s controller (with taint removal)
+│   ├── install-k0s-worker.sh          # Install k0s worker node
+│   └── setup-argocd.sh                # Install Cilium, Knative Operator, Sealed Secrets, ArgoCD
 ├── manifests/
 │   ├── argocd/
-│   │   ├── namespace.yaml                # ArgoCD namespace
-│   │   ├── argocd-install.yaml          # ArgoCD configuration
-│   │   └── cluster-bootstrap-app.yaml   # Bootstrap application
-│   └── sealed-secrets/
-│       ├── controller.yaml              # Sealed Secrets controller
-│       └── secrets/
-│           └── *-sealed.yaml            # Sealed secrets (safe to commit!)
+│   │   ├── namespace.yaml             # ArgoCD namespace
+│   │   └── cluster-init.yaml          # App-of-Apps root application
+│   └── applications/
+│       └── cluster-serverless-app.yaml  # Managed by cluster-init
 ├── config/
-│   └── k0s.yaml                         # K0s cluster configuration
-├── secrets/
-│   └── examples/
-│       └── cloudflare-secret.example    # Example secret template
+│   └── k0s.yaml                       # K0s cluster configuration
 └── README.md
+
+cluster-serverless/ (separate repo)
+└── infra/
+    ├── values.yaml                    # Infrastructure configuration
+    ├── Chart.yaml                     # Helm chart metadata
+    └── templates/
+        ├── cilium-app.yaml            # Cilium ArgoCD Application
+        ├── sealed-secrets-app.yaml    # Sealed Secrets ArgoCD Application
+        ├── knative-serving-cr.yaml    # KnativeServing CR (managed by Operator)
+        ├── knative-eventing-cr.yaml   # KnativeEventing CR (managed by Operator)
+        ├── observability-namespace.yaml
+        ├── opentelemetry/
+        │   └── deployment.yaml        # OpenTelemetry Collector
+        ├── jaeger/
+        │   ├── deployment.yaml        # Jaeger all-in-one
+        │   └── service.yaml
+        └── cloudflare-tunnel/
+            ├── deployment.yaml
+            ├── namespace.yaml
+            └── secret.yaml            # SealedSecret (encrypted token)
+```
+
+## 🔄 GitOps Flow (App-of-Apps Pattern)
+
+```
+1. Bootstrap installs:
+   - K0s controller
+   - Cilium CNI
+   - Knative Operator v1.17.1
+   - Sealed Secrets controller
+   - ArgoCD
+
+2. ArgoCD deploys cluster-init (App-of-Apps):
+   manifests/argocd/cluster-init.yaml
+   
+3. cluster-init manages:
+   - cluster-serverless-infra (Helm chart from cluster-serverless repo)
+   
+4. cluster-serverless-infra deploys:
+   - Cilium Application (via ArgoCD)
+   - Sealed Secrets Application (via ArgoCD)
+   - KnativeServing CR → Knative Operator deploys Serving components
+   - KnativeEventing CR → Knative Operator deploys Eventing components
+   - Cloudflare Tunnel (with SealedSecret)
+   - OpenTelemetry Collector
+   - Jaeger
+
+5. Self-Healing:
+   Delete any app → cluster-init recreates it within 30 seconds
 ```
 
 ## 🚀 Quick Start
 
-### 🎯 Deployment Scenarios
-
-Choose your deployment scenario:
-
-#### Scenario 1: VPS-Only (Simplest)
-Perfect for getting started quickly with a single VPS or multiple VPS nodes.
-
-#### Scenario 2: Hybrid VPS + Homelab (Recommended)
-VPS controller for stability + homelab workers for cost savings. Works great behind CGNAT!
-
-#### Scenario 3: Pure Homelab
-All nodes in homelab (requires one node with stable connection for controller).
-
----
-
 ### 📦 Installation Steps
 
-#### Step 1: Install Prerequisites (All Nodes)
+#### Step 1: Install Prerequisites & K0s Controller
 
-On **every** node (controller and workers):
+On the **controller node** (VPS recommended):
+
+```bash
+git clone https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
+cd k0s-cluster-bootstrap/scripts
+
+# Install prerequisites (Helm, kubeseal)
+chmod +x *.sh
+./install-prerequisites.sh
+
+# Install K0s controller
+./install-k0s-controller.sh
+# Choose option 1 for single-node cluster (controller runs workloads)
+```
+
+The script will:
+- Install k0s binary
+- Configure controller using `config/k0s.yaml`
+- Start k0s service
+- Remove control-plane taint (allows pod scheduling)
+- Generate kubeconfig at `~/.kube/config`
+
+#### Step 2: Deploy ArgoCD + Infrastructure
+
+This installs the complete stack via GitOps:
+
+```bash
+./setup-argocd.sh
+```
+
+This script will:
+1. Install **Cilium CNI** (eBPF-based networking)
+2. Install **Knative Operator** v1.17.1 (manages Knative lifecycle)
+3. Install **Sealed Secrets controller** (for encrypted secrets in Git)
+4. Install **ArgoCD** (GitOps engine)
+5. Deploy **cluster-init** App-of-Apps (manages all infrastructure)
+
+cluster-init will then automatically deploy:
+- cluster-serverless-infra (Helm chart)
+  - Cilium Application
+  - Sealed Secrets Application  
+  - KnativeServing CR → Operator deploys Serving + Kourier
+  - KnativeEventing CR → Operator deploys Eventing
+  - OpenTelemetry Collector
+  - Jaeger tracing UI
+  - Cloudflare Tunnel (after SealedSecret is configured)
+
+#### Step 3: Configure Cloudflare Tunnel Secret
+
+The Cloudflare Tunnel requires an encrypted tunnel token:
+
+```bash
+# Get your tunnel token from Cloudflare Zero Trust dashboard
+# https://one.dash.cloudflare.com/ → Networks → Tunnels → (your tunnel) → Configure
+
+# Create sealed secret
+echo -n "YOUR-TUNNEL-TOKEN" | kubectl create secret generic cloudflare-tunnel-secret \
+  --dry-run=client -o yaml --from-file=tunnel-token=/dev/stdin \
+  -n cloudflare-tunnel | \
+kubeseal --controller-name=sealed-secrets-controller --controller-namespace=kube-system \
+  -o yaml > cloudflare-sealed.yaml
+
+# Copy the encryptedData.tunnel-token value and update in cluster-serverless repo:
+# cluster-serverless/infra/templates/cloudflare-tunnel/secret.yaml
+
+# Commit and push to trigger ArgoCD sync
+```
+
+#### Step 4: Verify Deployment
+
+```bash
+# Check ArgoCD applications
+kubectl get app -n argocd
+
+# Expected output:
+# NAME                       SYNC STATUS   HEALTH STATUS
+# cilium                     Synced        Healthy
+# cluster-init               Synced        Healthy
+# cluster-serverless-infra   Synced        Healthy
+# sealed-secrets             Synced        Healthy
+
+# Check all infrastructure pods
+kubectl get pods -A
+
+# Access ArgoCD UI
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+# Username: admin
+# Password: (from above command)
+
+# Port forward to access locally
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Visit: https://localhost:8080
+```
+
+#### Step 5: Add Worker Nodes (Optional)
+
+On the controller, generate a join token:
+
+```bash
+sudo k0s token create --role=worker
+```
+
+On each worker node:
 
 ```bash
 git clone https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
 cd k0s-cluster-bootstrap/scripts
 chmod +x *.sh
 ./install-prerequisites.sh
-./install-k0s-controller.sh
-```
-
-This will:
-- Download and install k0s
-- Configure the controller using `config/k0s.yaml`
-- Start the k0s service
-- Generate kubeconfig file
-
-### Step 2: Add Worker Nodes (Optional)
-
-First, generate a join token on the controller:
-
-```bash
-sudo k0s token create --role=worker
-```
-
-Then, on each worker node:
-
-```bash
-cd scripts
-./install-k0s-worker.sh <join-token>
+./install-k0s-worker.sh <JOIN-TOKEN-FROM-CONTROLLER>
 ```
 
 ### Step 3: Set up ArgoCD
