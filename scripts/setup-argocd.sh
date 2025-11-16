@@ -73,8 +73,8 @@ echo "✅ Cilium CNI is ready"
 echo ""
 
 # Install Knative Operator (manages Knative lifecycle)
-echo "📦 Installing Knative Operator v1.17.1..."
-kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.17.1/operator.yaml
+echo "📦 Installing Knative Operator v1.18.3..."
+kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.18.3/operator.yaml
 
 echo "⏳ Waiting for Knative Operator to be ready..."
 # Wait for the deployment to exist and be available
