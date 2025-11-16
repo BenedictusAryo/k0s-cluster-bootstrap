@@ -95,6 +95,14 @@ for i in {1..60}; do
 done
 echo ""
 
+# Install Sealed Secrets Controller (for GitOps secret management)
+echo "🔐 Installing Sealed Secrets Controller..."
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.2/controller.yaml
+echo "⏳ Waiting for Sealed Secrets to be ready..."
+kubectl wait --for=condition=available --timeout=180s deployment/sealed-secrets-controller -n kube-system
+echo "✅ Sealed Secrets Controller is ready"
+echo ""
+
 # Create ArgoCD namespace
 echo "📦 Creating ArgoCD namespace..."
 kubectl apply -f "${MANIFESTS_DIR}/argocd/namespace.yaml"
