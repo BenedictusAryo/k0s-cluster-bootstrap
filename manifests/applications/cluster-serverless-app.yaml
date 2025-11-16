@@ -24,3 +24,13 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+  ignoreDifferences:
+    # Ignore operator-managed status fields
+    - group: operator.knative.dev
+      kind: KnativeServing
+      jsonPointers:
+        - /status
+    - group: operator.knative.dev
+      kind: KnativeEventing
+      jsonPointers:
+        - /status
