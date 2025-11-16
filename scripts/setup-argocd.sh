@@ -67,6 +67,14 @@ cilium status --wait --wait-duration=5m
 echo "✅ Cilium CNI is ready"
 echo ""
 
+# Install Knative Operator (manages Knative lifecycle)
+echo "📦 Installing Knative Operator v1.17.1..."
+kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.17.1/operator.yaml
+echo "⏳ Waiting for Knative Operator to be ready..."
+kubectl wait --for=condition=available --timeout=180s deployment/knative-operator -n default
+echo "✅ Knative Operator is ready"
+echo ""
+
 # Create ArgoCD namespace
 echo "📦 Creating ArgoCD namespace..."
 kubectl apply -f "${MANIFESTS_DIR}/argocd/namespace.yaml"
@@ -90,8 +98,37 @@ echo "✅ Cluster-serverless infra app configured"
 echo ""
 
 echo "⏳ Waiting for ArgoCD to sync infrastructure applications..."
-echo "   This will deploy: Cilium, Sealed Secrets, Knative, Kourier, OpenTelemetry, Jaeger"
+echo "   This will deploy: Cilium, Sealed Secrets, Knative (via Operator CRs), OpenTelemetry, Jaeger"
 sleep 10
+
+# Install Knative Serving
+echo ""
+echo "📦 Installing Knative Serving v1.17.1..."
+kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.17.1/serving-crds.yaml
+kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.17.1/serving-core.yaml
+
+# Install Kourier networking layer
+echo ""
+echo "📦 Installing Kourier v1.17.0..."
+kubectl apply -f https://github.com/knative-extensions/net-kourier/releases/download/knative-v1.17.0/kourier.yaml
+
+# Configure Knative to use Kourier
+kubectl patch configmap/config-network \
+  --namespace knative-serving \
+  --type merge \
+  --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
+
+# Install Knative Eventing
+echo ""
+echo "📦 Installing Knative Eventing v1.17.0..."
+kubectl apply -f https://github.com/knative/eventing/releases/download/knative-v1.17.0/eventing-crds.yaml
+kubectl apply -f https://github.com/knative/eventing/releases/download/knative-v1.17.0/eventing-core.yaml
+
+echo ""
+echo "⏳ Waiting for Knative components to be ready..."
+kubectl wait --for=condition=Ready pods --all -n knative-serving --timeout=180s
+kubectl wait --for=condition=Ready pods --all -n knative-eventing --timeout=180s
+kubectl wait --for=condition=Ready pods --all -n kourier-system --timeout=180s
 
 # Get ArgoCD admin password
 echo "========================================"
