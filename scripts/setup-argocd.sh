@@ -91,14 +91,14 @@ echo ""
 # Wait a bit more for all ArgoCD components
 sleep 10
 
-# Deploy cluster-serverless infra (App-of-Apps pattern)
-echo "📦 Deploying cluster-serverless infrastructure via ArgoCD..."
-kubectl apply -f "${MANIFESTS_DIR}/argocd/cluster-serverless-app.yaml"
-echo "✅ Cluster-serverless infra app configured"
+# Deploy cluster-init app (manages all infrastructure via App-of-Apps pattern)
+echo "📦 Deploying cluster-init application (App-of-Apps pattern)..."
+kubectl apply -f "${MANIFESTS_DIR}/argocd/root-app.yaml"
+echo "✅ cluster-init app configured - will manage all infrastructure apps"
 echo ""
 
 echo "⏳ Waiting for ArgoCD to sync infrastructure applications..."
-echo "   This will deploy: Cilium, Sealed Secrets, Knative (via Operator CRs), OpenTelemetry, Jaeger"
+echo "   cluster-init will deploy: cluster-serverless-infra (Cilium, Sealed Secrets, Knative, OpenTelemetry, Jaeger)"
 sleep 10
 
 # Install Knative Serving
