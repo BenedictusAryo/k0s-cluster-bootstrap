@@ -81,16 +81,18 @@ echo "⏳ Waiting for Knative Operator to be ready..."
 for i in {1..60}; do
     if kubectl get deployment operator -n knative-operator &>/dev/null; then
         if kubectl wait --for=condition=available --timeout=10s deployment/operator -n knative-operator &>/dev/null; then
+            echo "✅ Knative Operator is ready"
             break
         fi
     fi
-    echo "   Waiting for operator deployment... ($i/60)"
-    sleep 3
+    if [ $i -eq 60 ]; then
+        echo "⚠️  Timeout waiting for Knative Operator, but continuing..."
+        kubectl get pods -n knative-operator
+    else
+        echo "   Waiting for operator deployment... ($i/60)"
+        sleep 3
+    fi
 done
-
-# Verify it's actually ready
-kubectl get deployment operator -n knative-operator
-echo "✅ Knative Operator is ready"
 echo ""
 
 # Create ArgoCD namespace
