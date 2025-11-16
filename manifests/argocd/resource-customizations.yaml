@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  # Health check for KnativeServing
+  resource.customizations.health.operator.knative.dev_KnativeServing: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.conditions ~= nil then
+        for i, condition in ipairs(obj.status.conditions) do
+          if condition.type == "Ready" and condition.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "KnativeServing is ready"
+            return hs
+          end
+          if condition.type == "Ready" and condition.status == "False" then
+            hs.status = "Degraded"
+            hs.message = condition.message or "KnativeServing is not ready"
+            return hs
+          end
+        end
+      end
+    end
+    hs.status = "Progressing"
+    hs.message = "Waiting for KnativeServing to be ready"
+    return hs
+
+  # Health check for KnativeEventing
+  resource.customizations.health.operator.knative.dev_KnativeEventing: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.conditions ~= nil then
+        for i, condition in ipairs(obj.status.conditions) do
+          if condition.type == "Ready" and condition.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "KnativeEventing is ready"
+            return hs
+          end
+          if condition.type == "Ready" and condition.status == "False" then
+            hs.status = "Degraded"
+            hs.message = condition.message or "KnativeEventing is not ready"
+            return hs
+          end
+        end
+      end
+    end
+    hs.status = "Progressing"
+    hs.message = "Waiting for KnativeEventing to be ready"
+    return hs
+
+  # Health check for SealedSecret
+  resource.customizations.health.bitnami.com_SealedSecret: |
+    hs = {}
+    if obj.status ~= nil then
+      if obj.status.conditions ~= nil then
+        for i, condition in ipairs(obj.status.conditions) do
+          if condition.type == "Synced" and condition.status == "True" then
+            hs.status = "Healthy"
+            hs.message = "SealedSecret is synced"
+            return hs
+          end
+          if condition.type == "Synced" and condition.status == "False" then
+            hs.status = "Degraded"
+            hs.message = condition.message or "SealedSecret sync failed"
+            return hs
+          end
+        end
+      end
+    end
+    hs.status = "Progressing"
+    hs.message = "Waiting for SealedSecret to sync"
+    return hs

@@ -119,6 +119,21 @@ echo ""
 # Wait a bit more for all ArgoCD components
 sleep 10
 
+# Configure ArgoCD resource health checks
+echo "🔧 Configuring ArgoCD resource health checks..."
+kubectl apply -f "${MANIFESTS_DIR}/argocd/resource-customizations.yaml"
+echo "✅ Health checks configured for Knative and SealedSecret resources"
+echo ""
+
+# Restart ArgoCD to pick up the new configuration
+echo "🔄 Restarting ArgoCD to apply health check configuration..."
+kubectl rollout restart deployment/argocd-repo-server -n argocd
+kubectl rollout restart deployment/argocd-server -n argocd
+kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=180s
+kubectl rollout status deployment/argocd-server -n argocd --timeout=180s
+echo "✅ ArgoCD restarted with new configuration"
+echo ""
+
 # Deploy cluster-init app (manages all infrastructure via App-of-Apps pattern)
 echo "📦 Deploying cluster-init application (App-of-Apps pattern)..."
 kubectl apply -f "${MANIFESTS_DIR}/argocd/cluster-init.yaml"
