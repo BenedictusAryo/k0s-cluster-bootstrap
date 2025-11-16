@@ -113,7 +113,7 @@ sleep 10
 
 # Deploy cluster-init app (manages all infrastructure via App-of-Apps pattern)
 echo "📦 Deploying cluster-init application (App-of-Apps pattern)..."
-kubectl apply -f "${MANIFESTS_DIR}/argocd/root-app.yaml"
+kubectl apply -f "${MANIFESTS_DIR}/argocd/cluster-init.yaml"
 echo "✅ cluster-init app configured - will manage all infrastructure apps"
 echo ""
 
