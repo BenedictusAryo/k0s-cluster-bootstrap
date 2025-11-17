@@ -203,26 +203,88 @@ cluster-init will then automatically deploy:
   - Jaeger tracing UI
   - Cloudflare Tunnel (after SealedSecret is configured)
 
-#### Step 3: Configure Cloudflare Tunnel Secret
+#### Step 3: Configure Cloudflare Tunnel
 
-The Cloudflare Tunnel requires an encrypted tunnel token:
+**A. Generate Sealed Secret for Tunnel Token**
 
+Follow the guide in cluster-serverless repository:
 ```bash
-# Get your tunnel token from Cloudflare Zero Trust dashboard
-# https://one.dash.cloudflare.com/ → Networks → Tunnels → (your tunnel) → Configure
-
-# Create sealed secret
-echo -n "YOUR-TUNNEL-TOKEN" | kubectl create secret generic cloudflare-tunnel-secret \
-  --dry-run=client -o yaml --from-file=tunnel-token=/dev/stdin \
-  -n cloudflare-tunnel | \
-kubeseal --controller-name=sealed-secrets-controller --controller-namespace=kube-system \
-  -o yaml > cloudflare-sealed.yaml
-
-# Copy the encryptedData.tunnel-token value and update in cluster-serverless repo:
-# cluster-serverless/infra/templates/cloudflare-tunnel/secret.yaml
-
-# Commit and push to trigger ArgoCD sync
+cd ../cluster-serverless
+# See: docs/CLOUDFLARE_TUNNEL_GITOPS_SETUP.md for complete setup
+# Or use the quick script:
+cd scripts
+./generate-sealed-secret.sh
 ```
+
+This will prompt for your Cloudflare Tunnel token and create an encrypted secret in Git.
+
+**B. Configure Single Wildcard Route (ONE-TIME SETUP)**
+
+In Cloudflare Zero Trust Dashboard, create just **ONE route**:
+
+1. Go to: https://one.dash.cloudflare.com/
+2. Navigate: **Networks** → **Tunnels** → Your tunnel
+3. Go to **"Public Hostname"** tab  
+4. Click **"Add a public hostname"**
+5. Fill in:
+   - **Subdomain**: `*` (wildcard - routes ALL subdomains)
+   - **Domain**: `benedict-aryo.com` (your domain)
+   - **Type**: `HTTPS`
+   - **URL**: `https://cloudflare-gateway.gateway-system.svc.cluster.local:443`
+   - **TLS Options**: ✅ Enable "No TLS Verify" (Gateway presents an internal cert)
+6. Click **"Save"**
+
+**That's it!** This single wildcard route sends ALL `*.benedict-aryo.com` traffic to the Cilium `cloudflare-gateway`. From there, Gateway HTTPRoutes decide whether to send the request directly to an infrastructure Service or hand it to Kourier for Knative workloads.
+
+**C. All Application Routing Managed in Git**
+
+After the wildcard route is configured, **never touch the Cloudflare dashboard again** for routing!
+
+All application routing is managed via Kubernetes manifests in Git:
+
+**For infrastructure services** (ArgoCD, Jaeger, etc.):
+```yaml
+# Example: ArgoCD Gateway HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+   name: argocd-route
+   namespace: argocd
+spec:
+   parentRefs:
+   - name: cloudflare-gateway
+      namespace: gateway-system
+   hostnames:
+   - argocd.benedict-aryo.com
+   rules:
+   - backendRefs:
+      - name: argocd-server
+         namespace: argocd
+         port: 443
+```
+
+**For serverless applications**:
+```yaml
+# Knative Service - automatically creates route
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: my-app
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - image: gcr.io/knative-samples/helloworld-go
+```
+Automatically accessible at: `my-app.default.benedict-aryo.com`
+
+**How it works**:
+1. User accesses `argocd.benedict-aryo.com`
+2. Cloudflare routes to the `cloudflare-gateway` (via wildcard route)
+3. Gateway matches the HTTPRoute and forwards directly to `argocd-server`
+4. For Knative hostnames, the wildcard HTTPRoute forwards to `kourier-gateway`, which performs revision-level routing
+5. **All routing logic in Git!** 🎉
 
 #### Step 4: Verify Deployment
 
