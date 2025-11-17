@@ -38,8 +38,8 @@ echo "✅ Cluster is accessible"
 kubectl get nodes
 echo ""
 
-# Install Cilium CNI first (required for pod networking)
-echo "🌐 Installing Cilium CNI..."
+# Install Cilium CNI first (required for pod networking + Gateway controller)
+echo "🌐 Installing Cilium CNI (with Gateway API controller)..."
 echo "   (Required before ArgoCD pods can start)"
 
 # Install Cilium CLI if not present
@@ -54,17 +54,27 @@ if ! command -v cilium &> /dev/null; then
     rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 fi
 
+# Shared helm values for initial install or upgrades
+CILIUM_INSTALL_FLAGS=(
+    --set kubeProxyReplacement=false
+    --set k8sServiceHost=localhost
+    --set k8sServicePort=6443
+    --set gatewayAPI.enabled=true
+    --set gatewayAPI.controller.enabled=true
+    --version 1.18.4
+)
+
 # Check if Cilium is already installed
 if cilium status &>/dev/null; then
     echo "✅ Cilium is already installed"
+    if ! kubectl get deployment cilium-gateway-controller -n kube-system &>/dev/null; then
+        echo "   🔄 Enabling Cilium Gateway API via in-place upgrade..."
+        cilium install "${CILIUM_INSTALL_FLAGS[@]}"
+    fi
 else
-    # Install Cilium with minimal configuration
+    # Install Cilium with Gateway API controller enabled
     echo "   Installing Cilium to cluster..."
-    cilium install \
-        --set kubeProxyReplacement=false \
-        --set k8sServiceHost=localhost \
-        --set k8sServicePort=6443 \
-        --version 1.18.4
+    cilium install "${CILIUM_INSTALL_FLAGS[@]}"
 fi
 
 echo "⏳ Waiting for Cilium to be ready..."

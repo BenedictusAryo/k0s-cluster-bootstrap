@@ -23,6 +23,10 @@ spec:
           enabled: true
           relay:
             enabled: true
+        gatewayAPI:
+          enabled: true
+          controller:
+            enabled: true
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system

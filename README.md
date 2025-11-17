@@ -187,7 +187,7 @@ This installs the complete stack via GitOps:
 ```
 
 This script will:
-1. Install **Cilium CNI** (eBPF-based networking)
+1. Install **Cilium CNI** (eBPF-based networking) with the **Gateway API controller** (needed for Cloudflare → Cilium routing)
 2. Install **Knative Operator** v1.17.1 (manages Knative lifecycle)
 3. Install **Sealed Secrets controller** (for encrypted secrets in Git)
 4. Install **ArgoCD** (GitOps engine)
@@ -238,7 +238,7 @@ In Cloudflare Zero Trust Dashboard, create just **ONE route**:
 
 **C. All Application Routing Managed in Git**
 
-After the wildcard route is configured, **never touch the Cloudflare dashboard again** for routing!
+After the wildcard route is configured, **never touch the Cloudflare dashboard again** for routing! (Verify the controller with `kubectl -n kube-system get deploy cilium-gateway-controller` — it should be installed automatically now.)
 
 All application routing is managed via Kubernetes manifests in Git:
 
