@@ -61,13 +61,15 @@ if ! command -v cilium &> /dev/null; then
 fi
 
 # Shared helm values for initial install or upgrades
+
 CILIUM_INSTALL_FLAGS=(
     --set kubeProxyReplacement=false
     --set k8sServiceHost=localhost
     --set k8sServicePort=6443
     --set gatewayAPI.enabled=true
     --set gatewayAPI.controller.enabled=true
-        --version 1.19.0-pre.2
+    --set nodePort.enabled=true
+    --version 1.18.4
 )
 
 
