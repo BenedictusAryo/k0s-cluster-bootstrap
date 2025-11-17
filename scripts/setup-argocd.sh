@@ -39,10 +39,46 @@ kubectl get nodes
 echo ""
 
 
-# Install Gateway API CRDs (required for Cilium Gateway and HTTPRoute support)
+
+
+# Install all required Gateway API CRDs (v1.2.0) for Cilium Gateway support
 echo "📦 Installing Gateway API CRDs (required for Cilium Gateway)..."
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
 echo "✅ Gateway API CRDs installed"
+
+# Ensure valid wildcard-tls-cert Secret exists in gateway-system
+echo "🔒 Ensuring valid wildcard-tls-cert TLS Secret exists in gateway-system..."
+SECRET_OK=false
+if kubectl get secret wildcard-tls-cert -n gateway-system &>/dev/null; then
+    # Try to decode and validate the key and cert
+    CRT_TMP=$(mktemp)
+    KEY_TMP=$(mktemp)
+    kubectl get secret wildcard-tls-cert -n gateway-system -o jsonpath='{.data.tls\.crt}' | base64 -d > "$CRT_TMP" 2>/dev/null
+    kubectl get secret wildcard-tls-cert -n gateway-system -o jsonpath='{.data.tls\.key}' | base64 -d > "$KEY_TMP" 2>/dev/null
+    if openssl x509 -in "$CRT_TMP" -noout &>/dev/null && openssl rsa -in "$KEY_TMP" -noout &>/dev/null; then
+        echo "✅ Existing wildcard-tls-cert Secret is valid."
+        SECRET_OK=true
+    else
+        echo "⚠️  Existing wildcard-tls-cert Secret is invalid. Will regenerate."
+    fi
+    rm -f "$CRT_TMP" "$KEY_TMP"
+fi
+
+if [ "$SECRET_OK" != "true" ]; then
+    echo "🔑 Generating new self-signed wildcard certificate..."
+    CRT_TMP=$(mktemp)
+    KEY_TMP=$(mktemp)
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$KEY_TMP" -out "$CRT_TMP" -subj "/CN=*.benedict-aryo.com" &>/dev/null
+    kubectl delete secret wildcard-tls-cert -n gateway-system --ignore-not-found
+    kubectl create secret tls wildcard-tls-cert --cert="$CRT_TMP" --key="$KEY_TMP" -n gateway-system
+    rm -f "$CRT_TMP" "$KEY_TMP"
+    echo "✅ wildcard-tls-cert Secret created with new self-signed certificate."
+fi
 
 # Install Cilium CNI first (required for pod networking + Gateway controller)
 echo "🌐 Installing Cilium CNI (with Gateway API controller)..."
