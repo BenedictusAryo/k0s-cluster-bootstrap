@@ -13,6 +13,12 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONFIG_FILE="${SCRIPT_DIR}/../config/k0s.yaml"
 
+# Helper: list nodes that still advertise the control-plane taint
+get_control_plane_tainted_nodes() {
+    sudo k0s kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .spec.taints[*]}{.key}{"/"}{.effect}{" "}{end}{"\n"}{end}' 2>/dev/null \
+        | awk '/node-role.kubernetes.io\/control-plane\/NoSchedule/ {print $1}'
+}
+
 # Check prerequisites
 echo "📋 Checking prerequisites..."
 if ! command -v curl &> /dev/null; then
@@ -163,20 +169,28 @@ echo ""
 # Remove control-plane taint if needed
 if [[ "$REMOVE_TAINT" == "Y" ]]; then
     echo "🔓 Removing control-plane taint (controller will run workloads)..."
-    # Wait a bit for node to be fully registered
     sleep 10
-    
-    # Try multiple times as the taint might not be applied immediately
-    for i in {1..10}; do
-        if sudo k0s kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null; then
+
+    attempt=1
+    max_attempts=20
+    while [ $attempt -le $max_attempts ]; do
+        mapfile -t TAINTED_NODES < <(get_control_plane_tainted_nodes)
+        if [ ${#TAINTED_NODES[@]} -eq 0 ]; then
             echo "✅ Control-plane taint removed - workloads can now schedule"
             break
-        elif sudo k0s kubectl get nodes -o json | grep -q "node-role.kubernetes.io/control-plane"; then
-            echo "   Attempt $i: Taint not ready yet, waiting..."
-            sleep 3
-        else
-            echo "⚠️  No taint to remove (already removed or not present)"
-            break
+        fi
+
+        echo "   Attempt $attempt: removing taint from ${TAINTED_NODES[*]}"
+        for node in "${TAINTED_NODES[@]}"; do
+            sudo k0s kubectl taint nodes "$node" node-role.kubernetes.io/control-plane:NoSchedule- >/dev/null 2>&1 || true
+        done
+
+        sleep 5
+        attempt=$((attempt + 1))
+
+        if [ $attempt -gt $max_attempts ]; then
+            echo "⚠️  Could not verify taint removal automatically. Run:"
+            echo "    kubectl taint nodes ${TAINTED_NODES[*]} node-role.kubernetes.io/control-plane:NoSchedule-"
         fi
     done
     echo ""

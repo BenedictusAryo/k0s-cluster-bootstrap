@@ -38,6 +38,12 @@ echo "✅ Cluster is accessible"
 kubectl get nodes
 echo ""
 
+
+# Install Gateway API CRDs (required for Cilium Gateway and HTTPRoute support)
+echo "📦 Installing Gateway API CRDs (required for Cilium Gateway)..."
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+echo "✅ Gateway API CRDs installed"
+
 # Install Cilium CNI first (required for pod networking + Gateway controller)
 echo "🌐 Installing Cilium CNI (with Gateway API controller)..."
 echo "   (Required before ArgoCD pods can start)"
@@ -61,7 +67,7 @@ CILIUM_INSTALL_FLAGS=(
     --set k8sServicePort=6443
     --set gatewayAPI.enabled=true
     --set gatewayAPI.controller.enabled=true
-    --version 1.18.4
+    --version 1.19.4
 )
 
 # Check if Cilium is already installed
