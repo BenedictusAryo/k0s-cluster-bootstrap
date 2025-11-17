@@ -77,7 +77,7 @@ if cilium status &>/dev/null; then
     read -p "Do you want to reinstall/upgrade Cilium? (y/N): " confirm_cilium
     if [[ "$confirm_cilium" =~ ^[Yy]$ ]]; then
         echo "   🔄 Reinstalling/upgrading Cilium..."
-        cilium install "${CILIUM_INSTALL_FLAGS[@]}"
+        cilium upgrade "${CILIUM_INSTALL_FLAGS[@]}"
     else
         echo "   Skipping Cilium installation."
     fi
