@@ -70,12 +70,16 @@ CILIUM_INSTALL_FLAGS=(
     --version 1.19.4
 )
 
+
 # Check if Cilium is already installed
 if cilium status &>/dev/null; then
     echo "✅ Cilium is already installed"
-    if ! kubectl get deployment cilium-gateway-controller -n kube-system &>/dev/null; then
-        echo "   🔄 Enabling Cilium Gateway API via in-place upgrade..."
+    read -p "Do you want to reinstall/upgrade Cilium? (y/N): " confirm_cilium
+    if [[ "$confirm_cilium" =~ ^[Yy]$ ]]; then
+        echo "   🔄 Reinstalling/upgrading Cilium..."
         cilium install "${CILIUM_INSTALL_FLAGS[@]}"
+    else
+        echo "   Skipping Cilium installation."
     fi
 else
     # Install Cilium with Gateway API controller enabled
@@ -88,9 +92,21 @@ cilium status --wait --wait-duration=5m
 echo "✅ Cilium CNI is ready"
 echo ""
 
+
 # Install Knative Operator (manages Knative lifecycle)
-echo "📦 Installing Knative Operator v1.18.3..."
-kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.18.3/operator.yaml
+if kubectl get deployment operator -n knative-operator &>/dev/null; then
+    echo "✅ Knative Operator is already installed"
+    read -p "Do you want to reinstall/upgrade Knative Operator? (y/N): " confirm_knative
+    if [[ "$confirm_knative" =~ ^[Yy]$ ]]; then
+        echo "   🔄 Reinstalling/upgrading Knative Operator..."
+        kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.18.3/operator.yaml
+    else
+        echo "   Skipping Knative Operator installation."
+    fi
+else
+    echo "📦 Installing Knative Operator v1.18.3..."
+    kubectl apply -f https://github.com/knative/operator/releases/download/knative-v1.18.3/operator.yaml
+fi
 
 echo "⏳ Waiting for Knative Operator to be ready..."
 # Wait for the deployment to exist and be available
@@ -111,21 +127,52 @@ for i in {1..60}; do
 done
 echo ""
 
+
 # Install Sealed Secrets Controller (for GitOps secret management)
-echo "🔐 Installing Sealed Secrets Controller..."
-kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.2/controller.yaml
-echo "⏳ Waiting for Sealed Secrets to be ready..."
-kubectl wait --for=condition=available --timeout=180s deployment/sealed-secrets-controller -n kube-system
-echo "✅ Sealed Secrets Controller is ready"
+if kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null; then
+    echo "✅ Sealed Secrets Controller is already installed"
+    read -p "Do you want to reinstall/upgrade Sealed Secrets Controller? (y/N): " confirm_sealed
+    if [[ "$confirm_sealed" =~ ^[Yy]$ ]]; then
+        echo "   🔄 Reinstalling/upgrading Sealed Secrets Controller..."
+        kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.2/controller.yaml
+        echo "⏳ Waiting for Sealed Secrets to be ready..."
+        kubectl wait --for=condition=available --timeout=180s deployment/sealed-secrets-controller -n kube-system
+        echo "✅ Sealed Secrets Controller is ready"
+    else
+        echo "   Skipping Sealed Secrets Controller installation."
+    fi
+else
+    echo "🔐 Installing Sealed Secrets Controller..."
+    kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.2/controller.yaml
+    echo "⏳ Waiting for Sealed Secrets to be ready..."
+    kubectl wait --for=condition=available --timeout=180s deployment/sealed-secrets-controller -n kube-system
+    echo "✅ Sealed Secrets Controller is ready"
+fi
 echo ""
 
+
 # Create ArgoCD namespace
-echo "📦 Creating ArgoCD namespace..."
-kubectl apply -f "${MANIFESTS_DIR}/argocd/namespace.yaml"
+if kubectl get namespace argocd &>/dev/null; then
+    echo "✅ ArgoCD namespace already exists"
+else
+    echo "📦 Creating ArgoCD namespace..."
+    kubectl apply -f "${MANIFESTS_DIR}/argocd/namespace.yaml"
+fi
 
 # Install ArgoCD
-echo "🐙 Installing ArgoCD..."
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+if kubectl get deployment argocd-server -n argocd &>/dev/null; then
+    echo "✅ ArgoCD is already installed"
+    read -p "Do you want to reinstall/upgrade ArgoCD? (y/N): " confirm_argocd
+    if [[ "$confirm_argocd" =~ ^[Yy]$ ]]; then
+        echo "   🔄 Reinstalling/upgrading ArgoCD..."
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    else
+        echo "   Skipping ArgoCD installation."
+    fi
+else
+    echo "🐙 Installing ArgoCD..."
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+fi
 
 echo "⏳ Waiting for ArgoCD to be ready (this may take 2-3 minutes)..."
 kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
