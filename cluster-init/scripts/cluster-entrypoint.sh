@@ -1,12 +1,3 @@
-# 8. Apply ArgoCD root Application manifest (if present)
-APP_MANIFEST="$REPO_ROOT/manifests/applications/cluster-init-app.yaml"
-if [ -f "$APP_MANIFEST" ]; then
-  echo "\n📦 Applying ArgoCD root Application (app-of-apps)..."
-  kubectl apply -f "$APP_MANIFEST"
-  echo "✅ Applied $APP_MANIFEST"
-else
-  echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
-fi
 #!/bin/bash
 set -e
 
@@ -74,6 +65,18 @@ else
     echo "✅ ArgoCD is already installed"
 fi
 
+# 5.5. Apply ArgoCD root Application manifest (cluster-init)
+APP_MANIFEST="$REPO_ROOT/manifests/applications/cluster-init-app.yaml"
+if [ -f "$APP_MANIFEST" ]; then
+  echo "\n📦 Applying ArgoCD root Application (cluster-init)..."
+  kubectl apply -f "$APP_MANIFEST"
+  echo "✅ Applied $APP_MANIFEST"
+  echo "⏳ Waiting for cluster-init ArgoCD application to be processed..."
+  sleep 10
+else
+  echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
+fi
+
 # 6. Run secret generation scripts
 echo "\n🔑 Running secret generation scripts..."
 "$SCRIPT_DIR/generate-tls-secret.sh"
@@ -101,40 +104,39 @@ else
   exit 1
 fi
 
-# 7. Optionally trigger ArgoCD sync (if argocd CLI is available)
-if command -v argocd &> /dev/null; then
-  echo "\n🔄 Optionally sync ArgoCD application? (y/n)"
-  read -r SYNC_CONFIRM
-  if [[ "$SYNC_CONFIRM" =~ ^[Yy]$ ]]; then
-    read -p "Enter ArgoCD app name (default: cluster-init): " APP_NAME
-    APP_NAME=${APP_NAME:-cluster-init}
+# 7. Optionally trigger ArgoCD sync (using kubectl instead of CLI)
+echo "\n🔄 Optionally trigger ArgoCD application sync? (y/n)"
+read -r SYNC_CONFIRM
+if [[ "$SYNC_CONFIRM" =~ ^[Yy]$ ]]; then
+  read -p "Enter ArgoCD app name (default: cluster-init): " APP_NAME
+  APP_NAME=${APP_NAME:-cluster-init}
 
-    # Port-forward ArgoCD API server to localhost:8080
-    echo "⏳ Port-forwarding ArgoCD API server to localhost:8080..."
-    kubectl -n argocd port-forward svc/argocd-server 8080:80 &
-    PF_PID=$!
-    sleep 5
+  # Check if the ArgoCD Application exists
+  echo "🔍 Checking if ArgoCD Application '$APP_NAME' exists..."
+  if kubectl get application "$APP_NAME" -n argocd &>/dev/null; then
+    echo "✅ ArgoCD Application '$APP_NAME' exists, triggering sync..."
 
-    # Get ArgoCD admin password from secret
-    ARGOCD_PWD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 --decode)
+    # Trigger sync by patching the Application with sync annotation
+    kubectl patch application "$APP_NAME" -n argocd --type merge -p '{
+      "metadata": {
+        "annotations": {
+          "argocd.argoproj.io/sync": "true"
+        }
+      }
+    }'
 
-    # Login to ArgoCD CLI
-    echo "🔑 Logging in to ArgoCD CLI..."
-    argocd login localhost:8080 --username admin --password "$ARGOCD_PWD" --insecure
-
-    # Sync the app
-    echo "🔄 Syncing ArgoCD app: $APP_NAME..."
-    argocd app sync "$APP_NAME"
-    SYNC_EXIT=$?
-
-    # Kill port-forward
-    kill $PF_PID
-    wait $PF_PID 2>/dev/null
-
-    if [ $SYNC_EXIT -eq 0 ]; then
-      echo "✅ ArgoCD sync triggered for $APP_NAME."
+    if [ $? -eq 0 ]; then
+      echo "✅ Sync triggered for ArgoCD Application '$APP_NAME'."
+      echo "📊 Check sync status with: kubectl get application $APP_NAME -n argocd"
+      echo "💡 Alternative: Use ArgoCD UI at https://argocd.benedict-aryo.com"
     else
-      echo "❌ ArgoCD sync failed for $APP_NAME."
+      echo "❌ Failed to trigger sync for '$APP_NAME'."
+      echo "💡 Alternative: Manually sync in ArgoCD UI or use:"
+      echo "   kubectl patch application $APP_NAME -n argocd --type merge -p '{\"operation\":{\"sync\":{}}}'"
     fi
+  else
+    echo "❌ ArgoCD Application '$APP_NAME' does not exist in namespace argocd."
+    echo "📋 Available ArgoCD Applications:"
+    kubectl get applications -n argocd 2>/dev/null || echo "No applications found or ArgoCD not ready yet."
   fi
 fi

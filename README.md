@@ -510,8 +510,20 @@ sudo k0s reset
 ArgoCD automatically syncs from Git. To manually sync:
 
 ```bash
-argocd app sync cluster-bootstrap
+# Trigger sync using kubectl (no CLI needed)
+kubectl patch application cluster-init -n argocd --type merge -p '{
+  "metadata": {
+    "annotations": {
+      "argocd.argoproj.io/sync": "true"
+    }
+  }
+}'
+
+# Check sync status
+kubectl get application cluster-init -n argocd
 ```
+
+Or use the ArgoCD UI at `https://argocd.benedict-aryo.com`
 
 ## 🛠️ Troubleshooting
 
