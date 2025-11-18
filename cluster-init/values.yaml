@@ -52,4 +52,4 @@ metallb:
     - name: default
       protocol: layer2
       addresses:
-        - 139.162.61.100-139.162.61.200  # Public IP range for LoadBalancer
+        - 139.162.61.125
