@@ -73,6 +73,9 @@ if [ -f "$APP_MANIFEST" ]; then
   echo "✅ Applied $APP_MANIFEST"
   echo "⏳ Waiting for cluster-init ArgoCD application to be processed..."
   sleep 10
+  echo "🔄 Forcing hard sync of cluster-init application..."
+  kubectl patch application cluster-init -n argocd --type merge -p '{"spec": {"syncPolicy": {"syncOptions": ["Prune=true", "Replace=true"]}}, "metadata": {"annotations": {"argocd.argoproj.io/sync": "true"}}}'
+  echo "✅ Hard sync triggered"
 else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
@@ -116,8 +119,13 @@ if [[ "$SYNC_CONFIRM" =~ ^[Yy]$ ]]; then
   if kubectl get application "$APP_NAME" -n argocd &>/dev/null; then
     echo "✅ ArgoCD Application '$APP_NAME' exists, triggering sync..."
 
-    # Trigger sync by patching the Application with sync annotation
+    # Trigger hard sync by patching the Application with sync options and annotation
     kubectl patch application "$APP_NAME" -n argocd --type merge -p '{
+      "spec": {
+        "syncPolicy": {
+          "syncOptions": ["Prune=true", "Replace=true"]
+        }
+      },
       "metadata": {
         "annotations": {
           "argocd.argoproj.io/sync": "true"
