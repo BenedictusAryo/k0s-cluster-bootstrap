@@ -5,6 +5,8 @@ kind: Gateway
 metadata:
   name: cloudflare-gateway
   namespace: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   gatewayClassName: cilium
   listeners:

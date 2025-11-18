@@ -6,6 +6,8 @@ kind: Application
 metadata:
   name: metallb
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -32,6 +34,8 @@ kind: IPAddressPool
 metadata:
   name: {{ .name }}
   namespace: metallb-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   protocol: {{ .protocol }}
   addresses:
