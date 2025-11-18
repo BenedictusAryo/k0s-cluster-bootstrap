@@ -1,0 +1,5 @@
+Thank you for installing the cluster-init Helm chart!
+
+- All cluster-wide infrastructure (Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.) is managed by this chart.
+- After installation, run the scripts in `cluster-init/scripts/` to generate secrets and trigger the GitOps flow.
+- Serverless workloads are managed by the cluster-serverless Helm chart, referenced as an app-of-apps from this chart.

@@ -1,0 +1,14 @@
+# cluster-init Scripts
+
+This directory contains all scripts required for cluster bootstrap, secret generation, and GitOps workflows.
+
+## Scripts
+- `install-prerequisites.sh`: Installs required tools (Helm, kubeseal, etc.)
+- `install-k0s-controller.sh`: Installs and configures the k0s controller node
+- `install-k0s-worker.sh`: Installs and joins a k0s worker node
+- `generate-tls-secret.sh`: Interactive script to generate and seal TLS secrets
+- `generate-cloudflare-secret.sh`: Interactive script to generate and seal Cloudflare Tunnel secrets
+- `cluster-entrypoint.sh`: Main entrypoint for secret generation, git diff/commit/push, and ArgoCD sync
+
+## Usage
+Run `cluster-entrypoint.sh` after installing the chart to generate secrets and trigger the GitOps flow.

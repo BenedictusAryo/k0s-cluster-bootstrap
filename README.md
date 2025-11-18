@@ -1,16 +1,17 @@
-# k0s-cluster-bootstrap
 
-GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), [Knative](https://knative.dev/), and [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets).
+# k0s-cluster-bootstrap (Helm Modular)
+
+Helm-based, GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets), [Cilium](https://cilium.io/), and [Cloudflare Gateway](https://www.cloudflare.com/).
 
 > 🏡 **Serverless Platform for VPS/Homelab with Full GitOps**
 > 
+
 > This setup provides:
-> - **Knative Serving**: Serverless request-driven workloads (scale-to-zero)
-> - **Knative Eventing**: Event-driven architecture
-> - **App-of-Apps Pattern**: Self-healing infrastructure management
-> - **Cloudflare Tunnel**: Secure access without exposed ports
-> - **Observability Stack**: OpenTelemetry + Jaeger tracing
-> - Works behind CGNAT, VPS, or hybrid deployments
+> - **Single Helm chart (`cluster-init`)**: Manages all cluster-wide infrastructure (Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.)
+> - **App-of-Apps Pattern**: ArgoCD Application CRs (templated) reference the cluster-serverless Helm chart for serverless workloads
+> - **Interactive secret generation**: Scripts for TLS and Cloudflare Tunnel secrets, with git diff/commit/push before ArgoCD sync
+> - **Self-healing GitOps**: All infra is declarative, version-controlled, and auto-reconciled
+> - **Works behind CGNAT, VPS, or hybrid deployments**
 
 ## 💡 Why This Setup?
 
@@ -27,45 +28,11 @@ GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments usin
 - ✅ **App-of-Apps GitOps**: cluster-init manages all infrastructure
 - ✅ **Self-Healing**: Delete any app, it auto-recreates via GitOps
 - ✅ Works behind CGNAT with Cloudflare Tunnel
-- ✅ No inbound ports needed
-- ✅ Automatic SSL via Cloudflare
-- ✅ Full observability with OpenTelemetry + Jaeger
 - ✅ Lightweight k0s (50-70% less resources than full K8s)
 
-## 📚 Prerequisites
+## 📊 Project Structure (Helm Modular)
 
-### For Controller Node (VPS recommended)
-- **OS**: Ubuntu 22.04 LTS / Debian 11+ / RHEL 8+
-- **CPU**: 4 cores (vCPU)
-- **RAM**: 8 GB
-- **Storage**: 100 GB SSD
-- **Network**: Public IP or stable connection
-- **Kernel**: Linux 5.4+ (for eBPF support)
-
-### For Worker Nodes (VPS or Homelab)
-- **OS**: Ubuntu 22.04 LTS / Debian 11+ / RHEL 8+
-- **CPU**: 4 cores
-- **RAM**: 8 GB
-- **Storage**: 50 GB SSD
-- **Network**: Outbound internet access (works behind CGNAT!)
-
-### External Requirements
-- Domain managed in Cloudflare DNS (e.g., `benedict-aryo.com`)
-- Git repository for GitOps (this repo)
-- sudo privileges on all nodes
-
-## 🏛️ Architecture
-
-```mermaid
-graph TB
-    Internet[Internet Users] -->|HTTPS| CF[Cloudflare Edge]
-    CF -.->|Tunnel| VPS[VPS Controller<br/>K0s + ArgoCD + Knative]
-    CF -.->|Tunnel| HL1[Homelab Worker 1]
-    CF -.->|Tunnel| HL2[Homelab Worker 2]
-    
-    VPS -->|App-of-Apps| ARGOCD[ArgoCD cluster-init]
-    ARGOCD -->|Manages| INFRA[cluster-serverless-infra]
-    INFRA -->|Deploys| KNATIVE[Knative Serving/Eventing]
+```
     INFRA -->|Deploys| OBS[OpenTelemetry + Jaeger]
     INFRA -->|Deploys| CILIUM[Cilium CNI]
     
@@ -121,38 +88,27 @@ cluster-serverless/ (separate repo)
             └── secret.yaml            # SealedSecret (encrypted token)
 ```
 
-## 🔄 GitOps Flow (App-of-Apps Pattern)
 
-```
-1. Bootstrap installs:
-   - K0s controller
-   - Cilium CNI
-   - Knative Operator v1.17.1
-   - Sealed Secrets controller
-   - ArgoCD
+## 🔄 GitOps Flow (Helm Modular, App-of-Apps)
 
-2. ArgoCD deploys cluster-init (App-of-Apps):
-   manifests/argocd/cluster-init.yaml
-   
-3. cluster-init manages:
-   - cluster-serverless-infra (Helm chart from cluster-serverless repo)
-   
-4. cluster-serverless-infra deploys:
-   - Cilium Application (via ArgoCD)
-   - Sealed Secrets Application (via ArgoCD)
-   - KnativeServing CR → Knative Operator deploys Serving components
-   - KnativeEventing CR → Knative Operator deploys Eventing components
-   - Cloudflare Tunnel (with SealedSecret)
-   - OpenTelemetry Collector
-   - Jaeger
+1. **Bootstrap phase**
+   - Install k0s controller and prerequisites
+   - Deploy cluster-init Helm chart (installs Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.)
+   - Run `cluster-entrypoint.sh` for interactive secret generation (TLS, Cloudflare Tunnel), git diff/commit/push
+   - Templated ArgoCD Application CRs reference the cluster-serverless Helm chart
 
-5. Self-Healing:
-   Delete any app → cluster-init recreates it within 30 seconds
-```
+2. **GitOps phase**
+   - ArgoCD syncs cluster-serverless Helm chart (app-of-apps)
+   - All serverless infra and workloads are managed as subcharts
+   - All changes are declarative, version-controlled, and self-healing
+
+3. **Self-healing**
+   - Delete any infra or app → ArgoCD/Helm will auto-recreate from Git
 
 ## 🚀 Quick Start
 
-### 📦 Installation Steps
+
+### 📦 Installation Steps (Helm Modular)
 
 #### Step 1: Install Prerequisites & K0s Controller
 
@@ -160,7 +116,7 @@ On the **controller node** (VPS recommended):
 
 ```bash
 git clone https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
-cd k0s-cluster-bootstrap/scripts
+cd k0s-cluster-bootstrap/cluster-init/scripts
 
 # Install prerequisites (Helm, kubeseal)
 chmod +x *.sh
@@ -299,94 +255,34 @@ kubectl get app -n argocd
 # cluster-serverless-infra   Synced        Healthy
 # sealed-secrets             Synced        Healthy
 
-# Check all infrastructure pods
-kubectl get pods -A
 
-# Access ArgoCD UI
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-# Username: admin
-# Password: (from above command)
-
-# Port forward to access locally
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# Visit: https://localhost:8080
-```
-
-#### Step 5: Add Worker Nodes (Optional)
-
-On the controller, generate a join token:
+#### Step 2: Deploy cluster-init Helm Chart & Run Entrypoint
 
 ```bash
-sudo k0s token create --role=worker
-```
+# From the root of the repo
+cd cluster-init
+helm install cluster-init .
 
-On each worker node:
-
-```bash
-git clone https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
-cd k0s-cluster-bootstrap/scripts
-chmod +x *.sh
-./install-prerequisites.sh
-./install-k0s-worker.sh <JOIN-TOKEN-FROM-CONTROLLER>
-```
-
-### Step 3: Set up ArgoCD
-
-On the controller node (or any machine with kubectl access):
-
-```bash
+# Run the entrypoint script for secret generation and GitOps flow
 cd scripts
-./setup-argocd.sh
+./cluster-entrypoint.sh
+# This will:
+# - Prompt for secret values (TLS, Cloudflare Tunnel, etc.)
+# - Show a git diff and prompt for confirmation
+# - Commit and push changes to main
+# - Trigger ArgoCD sync
 ```
 
-This will:
-- Create the ArgoCD namespace
-- Deploy ArgoCD
-- Deploy the cluster bootstrap application
-- Display the admin password
+#### Step 3: Configure Cloudflare Tunnel (One-Time)
 
-### Step 4: Access ArgoCD UI
+In Cloudflare Zero Trust Dashboard, create just **ONE wildcard route**:
+- **Subdomain**: `*` (wildcard)
+- **Domain**: your domain (e.g., `benedict-aryo.com`)
+- **Type**: `HTTPS`
+- **URL**: `https://cloudflare-gateway.gateway-system.svc.cluster.local:443`
+- **TLS Options**: Enable "No TLS Verify"
 
-Forward the ArgoCD server port:
-
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-```
-
-Access the UI at `https://localhost:8080`
-
-- Username: `admin`
-- Password: (displayed after running setup-argocd.sh)
-
-## 🔐 Secret Management
-
-This repository uses Sealed Secrets to securely store secrets in Git.
-
-### Installing kubeseal CLI
-
-```bash
-# Linux
-wget https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/kubeseal-0.24.0-linux-amd64.tar.gz
-tar xfz kubeseal-0.24.0-linux-amd64.tar.gz
-sudo install -m 755 kubeseal /usr/local/bin/kubeseal
-
-# macOS
-brew install kubeseal
-```
-
-### Creating Sealed Secrets
-
-1. Create your secret file (use the example as a template):
-
-```bash
-cp secrets/examples/cloudflare-secret.example secrets/my-secret.yaml
-# Edit the file with your actual values
-```
-
-2. Seal the secret:
-
-```bash
-kubeseal --format=yaml < secrets/my-secret.yaml > secrets/my-sealed-secret.yaml
+**All further routing is managed in Git via HTTPRoutes and ArgoCD Applications.**
 ```
 
 3. Apply the sealed secret:

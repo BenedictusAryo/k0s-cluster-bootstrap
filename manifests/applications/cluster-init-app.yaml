@@ -1,18 +1,18 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cluster-serverless-infra
+  name: cluster-init
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/BenedictusAryo/cluster-serverless.git
+    repoURL: https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
     targetRevision: main
-    path: infra
+    path: cluster-init
     helm:
-      releaseName: cluster-serverless-infra
+      releaseName: cluster-init
       valueFiles:
         - values.yaml
   destination:
@@ -24,13 +24,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-  ignoreDifferences:
-    # Ignore operator-managed status fields
-    - group: operator.knative.dev
-      kind: KnativeServing
-      jsonPointers:
-        - /status
-    - group: operator.knative.dev
-      kind: KnativeEventing
-      jsonPointers:
-        - /status

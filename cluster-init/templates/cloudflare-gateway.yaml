@@ -1,0 +1,22 @@
+---
+# Cloudflare Gateway installation (example manifest)
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: cloudflare-gateway
+  namespace: gateway-system
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: wildcard-tls-cert
+            kind: Secret
+            group: ""
+      allowedRoutes:
+        namespaces:
+          from: All
