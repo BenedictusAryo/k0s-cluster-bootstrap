@@ -30,7 +30,7 @@ argocd:
     enabled: true
     hostname: argocd.benedict-aryo.com
 cloudflareGateway:
-  enabled: true
+  enabled: false
 
 # Cloudflare Tunnel configuration
 cloudflareTunnel:
