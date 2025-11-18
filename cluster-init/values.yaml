@@ -10,6 +10,8 @@ applications:
       - values.yaml
     destinationNamespace: argocd
 # Default values for cluster-init Helm chart
+nameOverride: ""
+fullnameOverride: ""
 cilium:
   enabled: true
 sealedSecrets:
