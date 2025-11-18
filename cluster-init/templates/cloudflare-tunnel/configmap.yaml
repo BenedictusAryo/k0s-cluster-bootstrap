@@ -1,0 +1,43 @@
+{{- if .Values.cloudflareTunnel.enabled }}
+{{- if .Values.cloudflareTunnel.useConfigFile }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflare-tunnel-config
+  namespace: {{ .Values.cloudflareTunnel.namespace }}
+  labels:
+    app.kubernetes.io/name: cloudflare-tunnel
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  config.yaml: |
+    # Cloudflare Tunnel Configuration
+    # Managed via GitOps - changes here are automatically applied
+    
+    tunnel: {{ .Values.cloudflareTunnel.tunnelId }}
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    
+    # Metrics endpoint for monitoring
+    metrics: 0.0.0.0:2000
+    
+    # Ingress rules - route external hostnames to internal services
+    ingress:
+    {{- range .Values.cloudflareTunnel.ingress }}
+      - hostname: {{ .hostname }}
+        service: {{ .service }}
+        {{- if .originRequest }}
+        originRequest:
+          {{- if .originRequest.noTLSVerify }}
+          noTLSVerify: {{ .originRequest.noTLSVerify }}
+          {{- end }}
+          {{- if .originRequest.connectTimeout }}
+          connectTimeout: {{ .originRequest.connectTimeout }}
+          {{- end }}
+          {{- if .originRequest.tlsTimeout }}
+          tlsTimeout: {{ .originRequest.tlsTimeout }}
+          {{- end }}
+        {{- end }}
+    {{- end }}
+      # Catch-all rule (required)
+      - service: http_status:404
+{{- end }}
+{{- end }}

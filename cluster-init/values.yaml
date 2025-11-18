@@ -1,10 +1,11 @@
 applications:
   - name: cluster-serverless
+    active: false
     namespace: argocd
     repoURL: https://github.com/BenedictusAryo/cluster-serverless.git
     targetRevision: main
-    path: infra
-    chart: cluster-serverless-infra
+    path: .
+    chart: cluster-serverless
     version: 1.0.0
     valueFiles:
       - values.yaml
@@ -14,6 +15,8 @@ nameOverride: ""
 fullnameOverride: ""
 cilium:
   enabled: true
+  gatewayAPI:
+    enabled: true
 sealedSecrets:
   enabled: true
   image:
@@ -23,5 +26,21 @@ argocd:
   enabled: true
   helm:
     version: "9.1.3"
+  ingress:
+    enabled: true
+    hostname: argocd.benedict-aryo.com
 cloudflareGateway:
   enabled: true
+
+# Cloudflare Tunnel configuration
+cloudflareTunnel:
+  enabled: true
+  namespace: cloudflare-tunnel
+
+  # Replica count for HA
+  replicas: 2
+
+  # Credentials (SealedSecret deployed via GitOps)
+  credentials:
+    useExistingSecret: false  # SealedSecret is managed in templates/
+    secretName: cloudflare-tunnel-secret

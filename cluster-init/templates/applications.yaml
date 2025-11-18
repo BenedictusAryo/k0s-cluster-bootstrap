@@ -1,5 +1,6 @@
 {{- if .Values.applications }}
 {{- range .Values.applications }}
+{{- if .active | default true }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -36,5 +37,6 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+{{- end }}
 {{- end }}
 {{- end }}

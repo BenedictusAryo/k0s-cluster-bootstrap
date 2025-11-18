@@ -57,35 +57,37 @@ k0s-cluster-bootstrap/
 │   ├── install-k0s-controller.sh      # Install k0s controller (with taint removal)
 │   ├── install-k0s-worker.sh          # Install k0s worker node
 │   └── setup-argocd.sh                # Install Cilium, Knative Operator, Sealed Secrets, ArgoCD
-├── manifests/
-│   ├── argocd/
-│   │   ├── namespace.yaml             # ArgoCD namespace
-│   │   └── cluster-init.yaml          # App-of-Apps root application
-│   └── applications/
-│       └── cluster-serverless-app.yaml  # Managed by cluster-init
+├── cluster-init/                      # Helm chart for cluster-wide infrastructure
+│   ├── Chart.yaml                     # Helm chart metadata
+│   ├── values.yaml                    # Configuration for all cluster infra
+│   ├── scripts/                       # Interactive scripts for secret generation
+│   │   ├── generate-cloudflare-secret.sh  # Generate Cloudflare Tunnel sealed secret
+│   │   ├── generate-tls-secret.sh     # Generate Gateway TLS sealed secret
+│   │   └── cluster-entrypoint.sh      # Main script: generate secrets, git commit/push
+│   └── templates/                     # Helm templates
+│       ├── cloudflare-gateway.yaml    # Cilium Gateway + HTTPRoutes
+│       ├── cloudflare-tunnel/         # Cloudflare Tunnel deployment
+│       ├── argocd/                    # ArgoCD deployment + HTTPRoute
+│       ├── cilium.yaml                # Cilium CNI
+│       ├── sealed-secrets.yaml        # Sealed Secrets
+│       └── applications.yaml          # Templated ArgoCD Applications
 ├── config/
 │   └── k0s.yaml                       # K0s cluster configuration
 └── README.md
 
 cluster-serverless/ (separate repo)
-└── infra/
-    ├── values.yaml                    # Infrastructure configuration
-    ├── Chart.yaml                     # Helm chart metadata
-    └── templates/
-        ├── cilium-app.yaml            # Cilium ArgoCD Application
-        ├── sealed-secrets-app.yaml    # Sealed Secrets ArgoCD Application
-        ├── knative-serving-cr.yaml    # KnativeServing CR (managed by Operator)
-        ├── knative-eventing-cr.yaml   # KnativeEventing CR (managed by Operator)
-        ├── observability-namespace.yaml
-        ├── opentelemetry/
-        │   └── deployment.yaml        # OpenTelemetry Collector
-        ├── jaeger/
-        │   ├── deployment.yaml        # Jaeger all-in-one
-        │   └── service.yaml
-        └── cloudflare-tunnel/
-            ├── deployment.yaml
-            ├── namespace.yaml
-            └── secret.yaml            # SealedSecret (encrypted token)
+├── Chart.yaml                         # Root Helm chart with subchart dependencies
+├── values.yaml                        # Global config + subchart enables
+├── charts/                            # Subcharts
+│   ├── serverless-infra/              # Serverless infrastructure subchart
+│   │   ├── Chart.yaml
+│   │   ├── values.yaml                # Knative, Kourier, Jaeger, OpenTelemetry config
+│   │   └── templates/                 # Infrastructure components + Jaeger HTTPRoute
+│   └── serverless-app/                # Serverless applications subchart
+│       ├── Chart.yaml
+│       ├── values.yaml                # App configurations
+│       └── templates/                 # Example hello-world Knative Service
+└── README.md
 ```
 
 
@@ -93,17 +95,19 @@ cluster-serverless/ (separate repo)
 
 1. **Bootstrap phase**
    - Install k0s controller and prerequisites
-   - Deploy cluster-init Helm chart (installs Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.)
-   - Run `cluster-entrypoint.sh` for interactive secret generation (TLS, Cloudflare Tunnel), git diff/commit/push
-   - Templated ArgoCD Application CRs reference the cluster-serverless Helm chart
+   - Run `cluster-init/scripts/cluster-entrypoint.sh` (installs Cilium, Sealed Secrets, ArgoCD, generates secrets, creates cluster-init ArgoCD Application)
+   - cluster-init ArgoCD Application deploys the cluster-init Helm chart
+   - cluster-init Helm chart creates templated ArgoCD Applications (controlled by `active` flags)
 
-2. **GitOps phase**
+2. **Selective deployment phase**
+   - cluster-init creates `cluster-serverless` ArgoCD Application (when `active: true` in values.yaml)
    - ArgoCD syncs cluster-serverless Helm chart (app-of-apps)
-   - All serverless infra and workloads are managed as subcharts
-   - All changes are declarative, version-controlled, and self-healing
+   - cluster-serverless deploys serverless-infra subchart (Knative, Kourier, Jaeger, OpenTelemetry)
+   - cluster-serverless deploys serverless-app subchart (example applications)
 
 3. **Self-healing**
    - Delete any infra or app → ArgoCD/Helm will auto-recreate from Git
+   - To enable/disable components: edit `active` flags in `cluster-init/values.yaml` → sync cluster-init ArgoCD app
 
 ## 🚀 Quick Start
 
@@ -134,67 +138,74 @@ The script will:
 - Remove control-plane taint (allows pod scheduling)
 - Generate kubeconfig at `~/.kube/config`
 
-#### Step 2: Deploy ArgoCD + Infrastructure
+#### Step 2: Bootstrap Infrastructure & ArgoCD
 
-This installs the complete stack via GitOps:
+Run the interactive bootstrap script:
 
 ```bash
-./setup-argocd.sh
+./cluster-entrypoint.sh
 ```
 
 This script will:
-1. Install **Cilium CNI** (eBPF-based networking) with the **Gateway API controller** (needed for Cloudflare → Cilium routing)
-2. Install **Knative Operator** v1.17.1 (manages Knative lifecycle)
-3. Install **Sealed Secrets controller** (for encrypted secrets in Git)
+1. Install **Gateway API CRDs** (required for Cilium Gateway)
+2. Install **Cilium CNI** (eBPF-based networking) with Gateway API controller
+3. Install **Sealed Secrets controller** (encrypted secrets in Git)
 4. Install **ArgoCD** (GitOps engine)
-5. Deploy **cluster-init** App-of-Apps (manages all infrastructure)
+5. Generate **TLS certificates** and **Cloudflare Tunnel secrets**
+6. Show **git diff** for review, prompt to **commit/push**
+7. Create the **`cluster-init` ArgoCD Application** (manages all infrastructure)
 
-cluster-init will then automatically deploy:
-- cluster-serverless-infra (Helm chart)
-  - Cilium Application
-  - Sealed Secrets Application  
-  - KnativeServing CR → Operator deploys Serving + Kourier
-  - KnativeEventing CR → Operator deploys Eventing
-  - OpenTelemetry Collector
-  - Jaeger tracing UI
-  - Cloudflare Tunnel (after SealedSecret is configured)
+The cluster-init ArgoCD Application will deploy:
+- ✅ **Cilium Gateway** + HTTPRoutes (Cloudflare routing)
+- ✅ **Cloudflare Tunnel** (secure outbound access)
+- ✅ **ArgoCD UI** (GitOps management)
+- ❌ **cluster-serverless** (disabled by default via `active: false`)
 
-#### Step 3: Configure Cloudflare Tunnel
+#### Step 3: Enable Serverless Components (Optional)
 
-**A. Generate Sealed Secret for Tunnel Token**
+To enable the full serverless platform:
 
-Follow the guide in cluster-serverless repository:
 ```bash
-cd ../cluster-serverless
-# See: docs/CLOUDFLARE_TUNNEL_GITOPS_SETUP.md for complete setup
-# Or use the quick script:
-cd scripts
-./generate-sealed-secret.sh
+# Edit cluster-init values
+vim ../values.yaml
+
+# Change in applications section:
+# active: false → active: true
+
+# Commit and push
+git add values.yaml
+git commit -m "Enable cluster-serverless deployment"
+git push origin main
+
+# Sync cluster-init ArgoCD Application
+# ArgoCD UI: https://argocd.benedict-aryo.com
+# Find "cluster-init" → Sync
 ```
 
-This will prompt for your Cloudflare Tunnel token and create an encrypted secret in Git.
+This enables:
+- ✅ **Knative Serving** (scale-to-zero HTTP services)
+- ✅ **Knative Eventing** (event-driven architecture)
+- ✅ **Kourier** (lightweight ingress)
+- ✅ **Jaeger** (distributed tracing)
+- ✅ **OpenTelemetry** (observability)
+- ✅ **Example hello-world app**
 
-**B. Configure Single Wildcard Route (ONE-TIME SETUP)**
+#### Step 4: Configure Cloudflare (Already Done in Bootstrap)
 
-In Cloudflare Zero Trust Dashboard, create just **ONE route**:
+The bootstrap script already generated Cloudflare Tunnel secrets and configured the infrastructure. The single wildcard route sends all `*.benedict-aryo.com` traffic to the Cilium Gateway, which routes to:
 
-1. Go to: https://one.dash.cloudflare.com/
-2. Navigate: **Networks** → **Tunnels** → Your tunnel
-3. Go to **"Public Hostname"** tab  
-4. Click **"Add a public hostname"**
-5. Fill in:
-   - **Subdomain**: `*` (wildcard - routes ALL subdomains)
-   - **Domain**: `benedict-aryo.com` (your domain)
-   - **Type**: `HTTPS`
-   - **URL**: `https://cloudflare-gateway.gateway-system.svc.cluster.local:443`
-   - **TLS Options**: ✅ Enable "No TLS Verify" (Gateway presents an internal cert)
-6. Click **"Save"**
+- **ArgoCD UI**: `https://argocd.benedict-aryo.com`
+- **Jaeger UI**: `https://jaeger.benedict-aryo.com` (when serverless enabled)
+- **Knative apps**: `https://<app-name>.benedict-aryo.com` (when serverless enabled)
 
-**That's it!** This single wildcard route sends ALL `*.benedict-aryo.com` traffic to the Cilium `cloudflare-gateway`. From there, Gateway HTTPRoutes decide whether to send the request directly to an infrastructure Service or hand it to Kourier for Knative workloads.
+**Verify routing works:**
+```bash
+# Check Cilium Gateway
+kubectl get gateway -A
 
-**C. All Application Routing Managed in Git**
-
-After the wildcard route is configured, **never touch the Cloudflare dashboard again** for routing! (Verify the controller with `kubectl -n kube-system get deploy cilium-gateway-controller` — it should be installed automatically now.)
+# Test ArgoCD access
+curl -k https://argocd.benedict-aryo.com
+```
 
 All application routing is managed via Kubernetes manifests in Git:
 
