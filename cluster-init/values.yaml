@@ -44,3 +44,12 @@ cloudflareTunnel:
   credentials:
     useExistingSecret: false  # SealedSecret is managed in templates/
     secretName: cloudflare-tunnel-secret
+
+# MetalLB configuration
+metallb:
+  enabled: true
+  addressPools:
+    - name: default
+      protocol: layer2
+      addresses:
+        - 192.168.1.100-192.168.1.200  # Replace with your actual IP range
