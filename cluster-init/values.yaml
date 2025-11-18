@@ -23,7 +23,7 @@ sealedSecrets:
     repository: ghcr.io/bitnami-labs/sealed-secrets-controller
     tag: "0.33.1"
 argocd:
-  enabled: false  # Already installed by cluster-entrypoint.sh
+  enabled: true
   helm:
     version: "9.1.3"
   ingress:
@@ -52,4 +52,4 @@ metallb:
     - name: default
       protocol: layer2
       addresses:
-        - 192.168.1.100-192.168.1.200  # Replace with your actual IP range
+        - 139.162.61.100-139.162.61.200  # Public IP range for LoadBalancer
