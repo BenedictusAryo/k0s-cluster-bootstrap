@@ -13,12 +13,6 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONFIG_FILE="${SCRIPT_DIR}/../config/k0s.yaml"
 
-# Helper: list nodes that still advertise the control-plane taint
-get_control_plane_tainted_nodes() {
-    sudo k0s kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .spec.taints[*]}{.key}{"/"}{.effect}{" "}{end}{"\n"}{end}' 2>/dev/null \
-        | awk '/node-role.kubernetes.io\/control-plane\/NoSchedule/ {print $1}'
-}
-
 # Check prerequisites
 echo "📋 Checking prerequisites..."
 if ! command -v curl &> /dev/null; then
@@ -169,30 +163,23 @@ echo ""
 # Remove control-plane taint if needed
 if [[ "$REMOVE_TAINT" == "Y" ]]; then
     echo "🔓 Removing control-plane taint (controller will run workloads)..."
-    sleep 10
 
-    attempt=1
-    max_attempts=20
-    while [ $attempt -le $max_attempts ]; do
-        mapfile -t TAINTED_NODES < <(get_control_plane_tainted_nodes)
-        if [ ${#TAINTED_NODES[@]} -eq 0 ]; then
-            echo "✅ Control-plane taint removed - workloads can now schedule"
-            break
-        fi
+    # Wait a bit for node to be fully ready
+    sleep 5
 
-        echo "   Attempt $attempt: removing taint from ${TAINTED_NODES[*]}"
-        for node in "${TAINTED_NODES[@]}"; do
-            sudo k0s kubectl taint nodes "$node" node-role.kubernetes.io/control-plane:NoSchedule- >/dev/null 2>&1 || true
-        done
+    # Get the node name (usually "localhost" for k0s single-node)
+    NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "localhost")
 
-        sleep 5
-        attempt=$((attempt + 1))
+    echo "   Removing taint from node: $NODE_NAME"
+    kubectl taint nodes "$NODE_NAME" node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
 
-        if [ $attempt -gt $max_attempts ]; then
-            echo "⚠️  Could not verify taint removal automatically. Run:"
-            echo "    kubectl taint nodes ${TAINTED_NODES[*]} node-role.kubernetes.io/control-plane:NoSchedule-"
-        fi
-    done
+    # Verify taint removal
+    if kubectl get nodes "$NODE_NAME" -o jsonpath='{.spec.taints}' | grep -q "control-plane"; then
+        echo "⚠️  Taint may still be present. You can manually remove it with:"
+        echo "    kubectl taint nodes $NODE_NAME node-role.kubernetes.io/control-plane:NoSchedule-"
+    else
+        echo "✅ Control-plane taint removed - workloads can now schedule on controller"
+    fi
     echo ""
 else
     echo "ℹ️  Controller node will NOT run workloads (taint preserved)"
