@@ -14,16 +14,16 @@ applications:
 nameOverride: ""
 fullnameOverride: ""
 cilium:
-  enabled: true
+  enabled: false  # Already installed by cluster-entrypoint.sh
   gatewayAPI:
     enabled: true
 sealedSecrets:
-  enabled: true
+  enabled: false  # Already installed by cluster-entrypoint.sh
   image:
     repository: ghcr.io/bitnami-labs/sealed-secrets-controller
     tag: "0.33.1"
 argocd:
-  enabled: true
+  enabled: false  # Already installed by cluster-entrypoint.sh
   helm:
     version: "9.1.3"
   ingress:
