@@ -162,25 +162,28 @@ echo ""
 
 # Remove control-plane taint if needed
 if [[ "$REMOVE_TAINT" == "Y" ]]; then
-    echo "🔓 Removing control-plane taint (controller will run workloads)..."
+        echo "🔓 Removing control-plane taint (controller will run workloads)..."
 
-    # Wait a bit for node to be fully ready
-    sleep 5
+        # Wait a bit for node to be fully ready
+        sleep 5
 
-    # Get the node name (usually "localhost" for k0s single-node)
-    NODE_NAME=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "localhost")
-
-    echo "   Removing taint from node: $NODE_NAME"
-    kubectl taint nodes "$NODE_NAME" node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
-
-    # Verify taint removal
-    if kubectl get nodes "$NODE_NAME" -o jsonpath='{.spec.taints}' | grep -q "control-plane"; then
-        echo "⚠️  Taint may still be present. You can manually remove it with:"
-        echo "    kubectl taint nodes $NODE_NAME node-role.kubernetes.io/control-plane:NoSchedule-"
-    else
-        echo "✅ Control-plane taint removed - workloads can now schedule on controller"
-    fi
-    echo ""
+        # Get all node names (should be one for single-node, but robust for multi-node)
+        NODE_NAMES=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
+        for NODE_NAME in $NODE_NAMES; do
+            # Remove both possible taint keys (older and newer k8s versions)
+            kubectl taint nodes "$NODE_NAME" node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
+            kubectl taint nodes "$NODE_NAME" node-role.kubernetes.io/master:NoSchedule- 2>/dev/null || true
+            # Remove taint if present without effect (edge case)
+            kubectl taint nodes "$NODE_NAME" node.kubernetes.io/not-ready:NoSchedule- 2>/dev/null || true
+            # Verify taint removal
+            if kubectl get nodes "$NODE_NAME" -o jsonpath='{.spec.taints}' | grep -q "control-plane"; then
+                echo "⚠️  Taint may still be present on $NODE_NAME. You can manually remove it with:"
+                echo "    kubectl taint nodes $NODE_NAME node-role.kubernetes.io/control-plane:NoSchedule-"
+            else
+                echo "✅ Control-plane taint removed from $NODE_NAME - workloads can now schedule on controller"
+            fi
+        done
+        echo ""
 else
     echo "ℹ️  Controller node will NOT run workloads (taint preserved)"
     echo "   Add worker nodes using the join token below"
