@@ -1,3 +1,35 @@
+# ⚡️ ArgoCD Installation & HTTPRoute Management
+
+**ArgoCD is not installed by this chart.**
+You must install ArgoCD using the official Helm chart (or as an app-of-apps child) before deploying this chart. Example:
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm
+helm upgrade --install argocd argo/argo-cd \
+   --namespace argocd --create-namespace \
+   --set server.extraArgs={--insecure}
+```
+
+**Namespace Management:**
+- The `argocd` namespace is created by this chart with the annotation `helm.sh/resource-policy: keep`.
+- This ensures Helm will not delete the namespace on uninstall, and avoids adoption conflicts if ArgoCD is already present.
+
+**HTTPRoute Management:**
+- The ArgoCD HTTPRoute is managed by this chart (see `templates/argocd-httproute.yaml`).
+- The hostname and enablement are controlled via `values.yaml`:
+
+```yaml
+argocd:
+   httproute:
+      enabled: true
+      hostname: argocd.benedict-aryo.com
+```
+
+**Best Practice:**
+- Do not manage ArgoCD's own resources (ConfigMaps, Deployments, etc.) in this chart. Only manage the HTTPRoute and namespace if needed.
+- Use the app-of-apps pattern: let ArgoCD manage itself, and use this chart for cluster-wide infra and routing.
+
+---
 
 # k0s-cluster-bootstrap (Helm Modular)
 

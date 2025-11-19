@@ -1,0 +1,5 @@
+# ArgoCD HTTPRoute configuration
+argocd:
+  httproute:
+    enabled: true
+    hostname: argocd.benedict-aryo.com

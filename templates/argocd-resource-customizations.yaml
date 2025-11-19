@@ -40,19 +40,6 @@ data:
   # KnativeEventing Health Check
   resource.customizations.health.operator.knative.dev_KnativeEventing: |
     hs = {}
-    if obj.status == nil then
-      hs.status = "Progressing"
-      hs.message = "KnativeEventing resource created, waiting for operator"
-      return hs
-    end
-    if obj.status.conditions ~= nil then
-      for i, condition in ipairs(obj.status.conditions) do
-        if condition.type == "Ready" then
-          if condition.status == "True" then
-            hs.status = "Healthy"
-            hs.message = "All Knative Eventing components are ready"
-            return hs
-          elseif condition.status == "False" then
             hs.status = "Degraded"
             hs.message = condition.message or condition.reason or "KnativeEventing is not ready"
             return hs
