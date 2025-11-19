@@ -107,7 +107,11 @@ else
   exit 1
 fi
 
-# 7. Optionally trigger ArgoCD sync (using kubectl instead of CLI)
+# 7. Install or upgrade the k0s-cluster-bootstrap Helm chart
+echo "\n🚀 Installing or upgrading the k0s-cluster-bootstrap Helm chart..."
+helm upgrade --install k0s-cluster-bootstrap .
+
+# 8. Optionally trigger ArgoCD sync (using kubectl instead of CLI)
 echo "\n🔄 Optionally trigger ArgoCD application sync? (y/n)"
 read -r SYNC_CONFIRM
 if [[ "$SYNC_CONFIRM" =~ ^[Yy]$ ]]; then
