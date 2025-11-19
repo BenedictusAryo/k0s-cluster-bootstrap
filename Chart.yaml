@@ -1,0 +1,6 @@
+apiVersion: v2
+name: k0s-cluster-bootstrap
+description: Cluster-wide bootstrap Helm chart (Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

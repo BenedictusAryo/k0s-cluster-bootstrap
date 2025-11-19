@@ -30,51 +30,33 @@ Helm-based, GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** depl
 - ✅ Works behind CGNAT with Cloudflare Tunnel
 - ✅ Lightweight k0s (50-70% less resources than full K8s)
 
-## 📊 Project Structure (Helm Modular)
-
-```
-    INFRA -->|Deploys| OBS[OpenTelemetry + Jaeger]
-    INFRA -->|Deploys| CILIUM[Cilium CNI]
-    
-    HL1 -.->|Join 6443| VPS
-    HL2 -.->|Join 6443| VPS
-    
-    style CF fill:#f39c12
-    style VPS fill:#3498db
-    style HL1 fill:#2ecc71
-    style HL2 fill:#2ecc71
-    style ARGOCD fill:#e74c3c
-    style INFRA fill:#9b59b6
-    style KNATIVE fill:#1abc9c
-```
 
 ## 📊 Project Structure
 
 ```
 k0s-cluster-bootstrap/
-├── scripts/
-│   ├── install-prerequisites.sh       # Install Helm, kubeseal
-│   ├── install-k0s-controller.sh      # Install k0s controller (with taint removal)
-│   ├── install-k0s-worker.sh          # Install k0s worker node
-│   └── setup-argocd.sh                # Install Cilium, Knative Operator, Sealed Secrets, ArgoCD
-├── cluster-init/                      # Helm chart for cluster-wide infrastructure
-│   ├── Chart.yaml                     # Helm chart metadata
-│   ├── values.yaml                    # Configuration for all cluster infra
-│   ├── scripts/                       # Interactive scripts for secret generation
-│   │   ├── generate-cloudflare-secret.sh  # Generate Cloudflare Tunnel sealed secret
-│   │   ├── generate-tls-secret.sh     # Generate Gateway TLS sealed secret
-│   │   └── cluster-entrypoint.sh      # Main script: generate secrets, git commit/push
-│   └── templates/                     # Helm templates
-│       ├── cloudflare-gateway.yaml    # Cilium Gateway + HTTPRoutes
-│       ├── cloudflare-tunnel/         # Cloudflare Tunnel deployment
-│       ├── argocd/                    # ArgoCD deployment + HTTPRoute
-│       ├── cilium.yaml                # Cilium CNI
-│       ├── sealed-secrets.yaml        # Sealed Secrets
-│       └── applications.yaml          # Templated ArgoCD Applications
+├── Chart.yaml                  # Main Helm chart for all cluster-wide infrastructure
+├── values.yaml                 # Helm values for infrastructure
+├── templates/                  # Helm templates (Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.)
+├── cluster-init/
+│   └── scripts/
+│       ├── cluster-entrypoint.sh
+│       ├── install-prerequisites.sh
+│       ├── install-k0s-controller.sh
+│       ├── install-k0s-worker.sh
+│       ├── generate-tls-secret.sh
+│       └── generate-cloudflare-secret.sh
+├── manifests/
+│   └── applications/
+│       └── cluster-init-app.yaml
 ├── config/
-│   └── k0s.yaml                       # K0s cluster configuration
+│   └── k0s.yaml
 └── README.md
+```
 
+- The **root Helm chart** manages all cluster-wide infrastructure.
+- The `cluster-init/scripts/` directory contains one-time bootstrap scripts (run before GitOps takes over).
+- After running `cluster-init/scripts/cluster-entrypoint.sh`, ArgoCD will sync the root Helm chart (`k0s-cluster-bootstrap`), not a subdirectory.
 cluster-serverless/ (separate repo)
 ├── Chart.yaml                         # Root Helm chart with subchart dependencies
 ├── values.yaml                        # Global config + subchart enables

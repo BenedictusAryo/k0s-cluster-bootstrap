@@ -1,6 +1,7 @@
+
 # cluster-init Scripts
 
-This directory contains all scripts required for cluster bootstrap, secret generation, and GitOps workflows.
+This directory contains all scripts required for initial cluster bootstrap, secret generation, and GitOps workflows.
 
 ## Scripts
 - `install-prerequisites.sh`: Installs required tools (Helm, kubeseal, etc.)
@@ -11,4 +12,6 @@ This directory contains all scripts required for cluster bootstrap, secret gener
 - `cluster-entrypoint.sh`: Main entrypoint for secret generation, git diff/commit/push, and ArgoCD sync
 
 ## Usage
-Run `cluster-entrypoint.sh` after installing the chart to generate secrets and trigger the GitOps flow.
+
+1. Run `cluster-entrypoint.sh` after installing the cluster to generate secrets and trigger the initial GitOps flow.
+2. After bootstrap, ArgoCD will manage the cluster using the Helm chart at the root of the repository.
