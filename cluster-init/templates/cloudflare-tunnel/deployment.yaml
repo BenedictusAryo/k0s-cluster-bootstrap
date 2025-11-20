@@ -24,8 +24,7 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/cloudflare-tunnel/configmap.yaml") . | sha256sum }}
       {{- end }}
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirst
       containers:
       - name: cloudflared
         image: cloudflare/cloudflared:latest
