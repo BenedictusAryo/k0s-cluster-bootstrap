@@ -7,6 +7,9 @@ kind: Application
 metadata:
   name: {{ .name }}
   namespace: {{ .namespace | default "argocd" }}
+  annotations:
+    # Track the application status in the parent cluster-init chart
+    argocd.argoproj.io/tracking-id: cluster-init:argoproj.io/Application:{{ .namespace | default "argocd" }}/{{ .name }}
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
