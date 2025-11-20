@@ -23,7 +23,14 @@ spec:
         namespaces:
           from: All
 ---
-{{- if .Values.cloudflareGateway.enabled }}
+{{- if and .Values.cloudflareGateway.enabled .Values.applications }}
+{{- $serverlessEnabled := false -}}
+{{- range .Values.applications -}}
+{{- if and (eq .name "cluster-serverless") (eq .active true) -}}
+{{- $serverlessEnabled = true -}}
+{{- end -}}
+{{- end -}}
+{{- if $serverlessEnabled }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -46,4 +53,5 @@ spec:
     - name: kourier
       port: 80
       namespace: kourier-system
+{{- end }}
 {{- end }}
