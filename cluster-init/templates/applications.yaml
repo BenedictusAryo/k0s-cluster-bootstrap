@@ -1,6 +1,6 @@
 {{- if .Values.applications }}
 {{- range .Values.applications }}
-{{- if (eq (.active | default true) true) }}
+{{- if (or (not (hasKey . "active")) .active) }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
