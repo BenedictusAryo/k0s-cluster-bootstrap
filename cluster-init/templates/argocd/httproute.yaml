@@ -20,6 +20,6 @@ spec:
         value: /
     backendRefs:
     - name: argocd-server
-      port: 443
+      port: 80  # ArgoCD server is running with --insecure flag, so use HTTP port
       namespace: argocd
 {{- end }}
