@@ -1,0 +1,22 @@
+# Custom values for cluster-serverless that provides gateway TLS configuration
+# This fixes the nil pointer error in gateway/tls-secret.yaml template
+
+# Gateway configuration
+gateway:
+  tls:
+    enabled: false  # Disable TLS for now until the full gateway setup is ready
+
+# Override to make sure subcharts have proper default values
+serverless-infra:
+  enabled: true
+  gateway:
+    tls:
+      enabled: false
+
+serverless-app:
+  enabled: true
+
+global:
+  clusterName: cluster-serverless
+  domain: benedict-aryo.com
+  environment: production
