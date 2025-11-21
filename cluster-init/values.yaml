@@ -1,6 +1,6 @@
 applications:
   - name: cluster-serverless
-    active: false
+    active: true
     namespace: argocd
     repoURL: https://github.com/BenedictusAryo/cluster-serverless.git
     targetRevision: main
