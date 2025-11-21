@@ -5,7 +5,6 @@ applications:
     repoURL: https://github.com/BenedictusAryo/cluster-serverless.git
     targetRevision: main
     path: .
-    chart: cluster-serverless
     version: 1.0.0
     valueFiles:
       - values.yaml
