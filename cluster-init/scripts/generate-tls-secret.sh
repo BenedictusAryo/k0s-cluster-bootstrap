@@ -49,10 +49,33 @@ else
     echo "Generating new self-signed certificate using openssl..."
     TLS_CRT="$(mktemp)"
     TLS_KEY="$(mktemp)"
+    OPENSSL_CONF_FILE="$(mktemp)"
+    cat > "$OPENSSL_CONF_FILE" << 'EOF'
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+distinguished_name = dn
+req_extensions = v3_req
+
+[dn]
+CN=*.benedict-aryo.com
+
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = *.benedict-aryo.com
+DNS.2 = benedict-aryo.com
+EOF
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -subj "/CN=*.benedict-aryo.com" \
+        -config "$OPENSSL_CONF_FILE" \
+        -extensions v3_req \
         -keyout "$TLS_KEY" -out "$TLS_CRT"
-    echo "  Self-signed certificate generated for CN=*.benedict-aryo.com (valid 1 year)"
+    rm "$OPENSSL_CONF_FILE"
+    echo "  Self-signed certificate generated for benedict-aryo.com and *.benedict-aryo.com (valid 1 year)"
 fi
 
 # Create namespace if not exists (for kubeseal to work)
