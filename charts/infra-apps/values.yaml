@@ -1,0 +1,52 @@
+infraApps:
+  - name: cilium
+    namespace: kube-system
+    repoUrl: https://helm.cilium.io/
+    targetRevision: 1.18.4
+    chart: cilium
+    argocdSyncWave: "-5"
+    helmValuesFile: cilium-values.yaml
+
+  - name: cert-manager
+    namespace: cert-manager
+    repoUrl: https://charts.jetstack.io
+    targetRevision: v1.16.1
+    chart: cert-manager
+    argocdSyncWave: "-4"
+    helmValuesFile: cert-manager-values.yaml
+
+  - name: argocd
+    namespace: argocd
+    repoUrl: https://argoproj.github.io/argo-helm
+    targetRevision: 7.6.2
+    chart: argo-cd
+    argocdSyncWave: "-3"
+    helmValuesFile: argocd-values.yaml
+
+  - name: sealed-secrets
+    namespace: kube-system
+    repoUrl: https://charts.bitnami.com/bitnami
+    targetRevision: 2.17.0
+    chart: sealed-secrets
+    argocdSyncWave: "-2"
+    ignoreDifferences:
+      - group: apps
+        kind: Deployment
+        jsonPointers:
+          - /spec/replicas
+
+  - name: knative-operator
+    namespace: knative-operator
+    repoUrl: https://knative.github.io/operator
+    targetRevision: "1.18.0"
+    chart: knative-operator
+    argocdSyncWave: "-1"
+    helmValuesFile: knative-operator-values.yaml
+
+  - name: cloudflare-tunnel
+    namespace: cloudflare
+    repoUrl: https://cloudflare.github.io/helm-charts
+    targetRevision: "0.1.12"
+    chart: cloudflared
+    argocdSyncWave: "0"
+    helmValuesFile: cloudflare-tunnel-values.yaml

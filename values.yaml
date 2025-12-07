@@ -1,5 +1,32 @@
+# Enable the infra-apps subchart for app of apps pattern
+infra-apps:
+  enabled: true
+
 # ArgoCD HTTPRoute configuration
 argocd:
   httproute:
     enabled: true
     hostname: argocd.benedict-aryo.com
+
+# Configuration for different cluster components
+cilium:
+  enabled: true
+
+certificateManager:
+  enabled: true
+  email: "admin@benedict-aryo.com"  # Replace with your email
+  cloudflare:
+    email: "admin@benedict-aryo.com"  # Replace with your Cloudflare email
+
+cloudflareTunnel:
+  enabled: false
+  tunnelId: ""
+  namespace: "default"
+  useConfigFile: false
+  ingress: []
+
+sealedSecrets:
+  enabled: true
+
+knative:
+  enabled: true

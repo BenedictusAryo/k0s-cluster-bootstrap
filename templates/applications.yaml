@@ -1,32 +1,37 @@
 {{- if .Values.applications }}
 {{- range .Values.applications }}
-{{- if .active | default true }}
+{{- if (or (not (hasKey . "active")) .active) }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: {{ .name }}
   namespace: {{ .namespace | default "argocd" }}
+  annotations:
+    # Track the application status in the parent cluster-init chart
+    argocd.argoproj.io/tracking-id: cluster-init:argoproj.io/Application:{{ .namespace | default "argocd" }}/{{ .name }}
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: {{ .repoURL | quote }}
-    targetRevision: {{ .targetRevision | quote }}
     {{- if .chart }}
     chart: {{ .chart | quote }}
-    {{- end }}
+    targetRevision: {{ .version | default .targetRevision | quote }}
+    {{- else }}
+    targetRevision: {{ .targetRevision | quote }}
     {{- if .path }}
     path: {{ .path | quote }}
     {{- end }}
-    {{- if .version }}
+    {{- if .valueFiles }}
     helm:
       releaseName: {{ .name }}
       valueFiles:
         {{- range .valueFiles }}
         - {{ . | quote }}
         {{- end }}
+    {{- end }}
     {{- end }}
   destination:
     server: https://kubernetes.default.svc

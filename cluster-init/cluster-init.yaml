@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-init
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/manifest-generate-paths: .
+spec:
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+    - ApplyOutOfSyncOnly=true
+    - FailOnSharedResource=true
+  project: default
+  source:
+    repoURL: https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
+    targetRevision: HEAD
+    path: .
+    helm:
+      valueFiles:
+        - 'values.yaml'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-init
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: https://github.com/BenedictusAryo/k0s-cluster-bootstrap.git
+  insecure: "false"

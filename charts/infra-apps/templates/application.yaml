@@ -1,0 +1,56 @@
+{{- range .Values.infraApps}}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{required "name value is required!" .name}}
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: {{required ".argocdSyncWave value is required!" .argocdSyncWave | quote}}
+spec:
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+    - ApplyOutOfSyncOnly=true
+    - FailOnSharedResource=true
+    - CreateNamespace=true
+  {{- with .ignoreDifferences }}
+  ignoreDifferences:
+  {{- toYaml . | nindent 2 }}
+  {{- end}}
+  project: default
+  source:
+    repoURL: {{required "repoUrl value is required!" .repoUrl}}
+    targetRevision: {{required "targetRevision value is required!" .targetRevision}}
+{{- if .chart}}
+    chart: {{.chart}}
+{{- end}}
+{{- if or .path .bitbucket}}
+    path: {{ default "." .path }}
+{{- end}}
+{{- if .helmValuesFile}}
+    helm:
+      values: |-
+{{- $dataPath := printf "%s/%s" "helm-values" .helmValuesFile }}
+{{ $.Files.Get $dataPath | indent 8}}
+{{- end}}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{required ".namespace value is required!" .namespace}}
+---
+{{- if .bitbucket}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{.name}}-bitbucket-chart
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: {{.repoUrl}}
+  insecure: "true"
+---
+{{- end}}
+{{- end}}

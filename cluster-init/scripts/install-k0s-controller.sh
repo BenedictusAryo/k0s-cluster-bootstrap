@@ -38,91 +38,65 @@ sudo mkdir -p /etc/k0s
 if [ -f "${CONFIG_FILE}" ]; then
     echo "📝 Using custom k0s configuration from ${CONFIG_FILE}"
     sudo cp "${CONFIG_FILE}" /etc/k0s/k0s.yaml
-    
+
     # Prompt for VPS public IP if different from local IP
     echo ""
     echo "⚙️  Configuration Setup"
     echo "Current detected IP: ${SERVER_IP}"
     read -p "Enter VPS public IP (or press Enter to use ${SERVER_IP}): " PUBLIC_IP
     PUBLIC_IP=${PUBLIC_IP:-$SERVER_IP}
-    
+
     # Add public IP to SANs if provided
     if [ ! -z "${PUBLIC_IP}" ] && [ "${PUBLIC_IP}" != "${SERVER_IP}" ]; then
         echo "Adding ${PUBLIC_IP} to API server SANs..."
         sudo sed -i "/sans:/a\      - ${PUBLIC_IP}" /etc/k0s/k0s.yaml
     fi
-    
+
     # Ask about cluster topology
     echo ""
     echo "🤔 Cluster Configuration"
-    echo "1) Single-node cluster (controller + worker, no additional nodes planned)"
-    echo "2) Multi-node cluster with controller also running workloads"
-    echo "3) Multi-node cluster with controller dedicated (no workloads on controller)"
-    read -p "Select cluster type [1/2/3] (default: 1): " CLUSTER_TYPE
+    echo "1) Single-node cluster (controller + worker, can scale to multi-node later)"
+    echo "2) Multi-node cluster with controller dedicated (no workloads on controller)"
+    read -p "Select cluster type [1/2] (default: 1): " CLUSTER_TYPE
     CLUSTER_TYPE=${CLUSTER_TYPE:-1}
-    
+
     case "$CLUSTER_TYPE" in
         1)
-            echo "✅ Installing as single-node cluster (controller + worker)"
-            ENABLE_WORKER="Y"
-            REMOVE_TAINT="Y"
-            sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
+            echo "✅ Installing as single-node cluster with --enable-worker --no-taints (can expand to multi-node later)"
+            sudo k0s install controller --enable-worker --no-taints --config /etc/k0s/k0s.yaml
             ;;
         2)
-            echo "✅ Installing as multi-node cluster with controller running workloads"
-            ENABLE_WORKER="Y"
-            REMOVE_TAINT="Y"
-            sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
-            ;;
-        3)
             echo "✅ Installing as controller-only (dedicated, no workloads)"
-            ENABLE_WORKER="N"
-            REMOVE_TAINT="N"
             sudo k0s install controller --config /etc/k0s/k0s.yaml
             ;;
         *)
-            echo "⚠️  Invalid selection, defaulting to single-node cluster"
-            ENABLE_WORKER="Y"
-            REMOVE_TAINT="Y"
-            sudo k0s install controller --enable-worker --config /etc/k0s/k0s.yaml
+            echo "⚠️  Invalid selection, defaulting to single-node cluster with --enable-worker --no-taints"
+            sudo k0s install controller --enable-worker --no-taints --config /etc/k0s/k0s.yaml
             ;;
     esac
 else
     echo "⚠️  Custom config not found, using default configuration"
-    
+
     # Ask about cluster topology
     echo ""
     echo "🤔 Cluster Configuration"
-    echo "1) Single-node cluster (controller + worker, no additional nodes planned)"
-    echo "2) Multi-node cluster with controller also running workloads"
-    echo "3) Multi-node cluster with controller dedicated (no workloads on controller)"
-    read -p "Select cluster type [1/2/3] (default: 1): " CLUSTER_TYPE
+    echo "1) Single-node cluster (controller + worker, can scale to multi-node later)"
+    echo "2) Multi-node cluster with controller dedicated (no workloads on controller)"
+    read -p "Select cluster type [1/2] (default: 1): " CLUSTER_TYPE
     CLUSTER_TYPE=${CLUSTER_TYPE:-1}
-    
+
     case "$CLUSTER_TYPE" in
         1)
-            echo "✅ Installing as single-node cluster (controller + worker)"
-            ENABLE_WORKER="Y"
-            REMOVE_TAINT="Y"
-            sudo k0s install controller --enable-worker
+            echo "✅ Installing as single-node cluster with --enable-worker --no-taints (can expand to multi-node later)"
+            sudo k0s install controller --enable-worker --no-taints
             ;;
         2)
-            echo "✅ Installing as multi-node cluster with controller running workloads"
-            ENABLE_WORKER="Y"
-            REMOVE_TAINT="Y"
-            sudo k0s install controller --enable-worker
-            ;;
-        3)
             echo "✅ Installing as controller-only (dedicated, no workloads)"
-            ENABLE_WORKER="N"
-            REMOVE_TAINT="N"
             sudo k0s install controller
             ;;
         *)
-            echo "⚠️  Invalid selection, defaulting to single-node cluster"
-            ENABLE_WORKER="Y"
-            REMOVE_TAINT="Y"
-            sudo k0s install controller --enable-worker
+            echo "⚠️  Invalid selection, defaulting to single-node cluster with --enable-worker --no-taints"
+            sudo k0s install controller --enable-worker --no-taints
             ;;
     esac
 fi
@@ -159,36 +133,6 @@ sudo k0s kubeconfig admin > ~/.kube/config
 chmod 600 ~/.kube/config
 echo "✅ Kubeconfig saved to ~/.kube/config"
 echo ""
-
-# Remove control-plane taint if needed
-if [[ "$REMOVE_TAINT" == "Y" ]]; then
-        echo "🔓 Removing control-plane taint (controller will run workloads)..."
-
-        # Wait a bit for node to be fully ready
-        sleep 5
-
-        # Get all node names (should be one for single-node, but robust for multi-node)
-        NODE_NAMES=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
-        for NODE_NAME in $NODE_NAMES; do
-            # Remove both possible taint keys (older and newer k8s versions)
-            kubectl taint nodes "$NODE_NAME" node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || true
-            kubectl taint nodes "$NODE_NAME" node-role.kubernetes.io/master:NoSchedule- 2>/dev/null || true
-            # Remove taint if present without effect (edge case)
-            kubectl taint nodes "$NODE_NAME" node.kubernetes.io/not-ready:NoSchedule- 2>/dev/null || true
-            # Verify taint removal
-            if kubectl get nodes "$NODE_NAME" -o jsonpath='{.spec.taints}' | grep -q "control-plane"; then
-                echo "⚠️  Taint may still be present on $NODE_NAME. You can manually remove it with:"
-                echo "    kubectl taint nodes $NODE_NAME node-role.kubernetes.io/control-plane:NoSchedule-"
-            else
-                echo "✅ Control-plane taint removed from $NODE_NAME - workloads can now schedule on controller"
-            fi
-        done
-        echo ""
-else
-    echo "ℹ️  Controller node will NOT run workloads (taint preserved)"
-    echo "   Add worker nodes using the join token below"
-    echo ""
-fi
 
 # Generate worker join token
 echo "🎫 Generating worker join token..."

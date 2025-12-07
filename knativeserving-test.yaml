@@ -6,11 +6,11 @@ metadata:
 spec:
   version: "1.20.0"
   ingress:
-    kourier:
+    istio:
       enabled: true
   config:
     network:
-      ingress-class: kourier.ingress.networking.knative.dev
+      ingress-class: istio.ingress.networking.knative.dev
       domain-template: '{{`{{.Name}}.{{.Domain}}`}}'
     domain:
       benedict-aryo.com: ""

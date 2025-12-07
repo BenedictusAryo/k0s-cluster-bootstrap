@@ -28,31 +28,9 @@ if ! command -v cilium &> /dev/null; then
     rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 fi
 
-# 3. Install Cilium (if not present)
-if ! cilium status &>/dev/null; then
-    echo "🌐 Installing Cilium CNI (with Gateway API controller)..."
-    cilium install --set kubeProxyReplacement=false --set k8sServiceHost=localhost --set k8sServicePort=6443 --set gatewayAPI.enabled=true --set gatewayAPI.controller.enabled=true --set nodePort.enabled=true --version 1.18.4
-    echo "⏳ Waiting for Cilium to be ready..."
-    cilium status --wait --wait-duration=5m
-    echo "✅ Cilium CNI is ready"
-else
-    echo "✅ Cilium is already installed"
-fi
-
-# 4. Install Sealed Secrets Controller (if not present)
-if ! kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null; then
-    echo "🔐 Installing Sealed Secrets Controller..."
-    kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.2/controller.yaml
-    echo "⏳ Waiting for Sealed Secrets to be ready..."
-    kubectl wait --for=condition=available --timeout=180s deployment/sealed-secrets-controller -n kube-system
-    echo "✅ Sealed Secrets Controller is ready"
-else
-    echo "✅ Sealed Secrets Controller is already installed"
-fi
-
-# 5. Install ArgoCD using Helm
+# 3. Install ArgoCD using Helm (needed to bootstrap the infrastructure applications)
 if ! kubectl get deployment argocd-server -n argocd &>/dev/null; then
-    echo "🐙 Installing ArgoCD using Helm..."
+    echo "🐙 Installing ArgoCD using Helm (bootstrap only)..."
     helm repo add argo https://argoproj.github.io/argo-helm
     helm repo update
     helm upgrade --install argocd argo/argo-cd \
@@ -60,7 +38,7 @@ if ! kubectl get deployment argocd-server -n argocd &>/dev/null; then
       --set server.extraArgs={--insecure}
     echo "⏳ Waiting for ArgoCD to be ready (this may take 2-3 minutes)..."
     kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
-    echo "✅ ArgoCD is ready"
+    echo "✅ ArgoCD is ready for infrastructure deployment"
 else
     echo "✅ ArgoCD is already installed"
 fi

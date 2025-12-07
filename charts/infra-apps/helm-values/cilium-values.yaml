@@ -1,0 +1,15 @@
+kubeProxyReplacement: false
+k8sServiceHost: localhost
+k8sServicePort: 6443
+operator:
+  replicas: 1
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+gatewayAPI:
+  enabled: true
+  controller:
+    enabled: true
+nodePort:
+  enabled: true

@@ -1,5 +1,31 @@
+{{- if .Values.certificateManager.enabled }}
 ---
-# Cloudflare Gateway installation (example manifest)
+# Cloudflare Gateway with cert-manager certificates
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: cloudflare-gateway
+  namespace: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: benedict-aryo-com-tls
+            kind: Secret
+            group: ""
+      allowedRoutes:
+        namespaces:
+          from: All
+{{- else }}
+---
+# Cloudflare Gateway with default certificate
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -22,6 +48,7 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+{{- end }}
 ---
 {{- if and .Values.cloudflareGateway.enabled .Values.applications }}
 {{- $serverlessEnabled := false -}}
