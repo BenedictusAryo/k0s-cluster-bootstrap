@@ -433,7 +433,7 @@ In the Cloudflare Zero Trust Dashboard, configure your tunnel routes:
    - URL: `argocd-server.argocd.svc.cluster.local:443`
    - Additional settings → TLS → Enable **"No TLS Verify"** ✅
    
-   **Why "No TLS Verify"?** ArgoCD uses self-signed certificates internally. This setting tells Cloudflare Tunnel to trust the internal certificate. Your traffic is still encrypted end-to-end.
+   **Why "No TLS Verify"?** ArgoCD uses internal certificates. This setting tells Cloudflare Tunnel to trust the internal certificate. Your traffic is still encrypted end-to-end.
 
 2. **Jaeger** (optional, for observability):
    - Subdomain: `jaeger`
