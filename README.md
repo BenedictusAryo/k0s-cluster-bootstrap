@@ -116,9 +116,17 @@ cluster-serverless/ (separate repo)
 │       ├── Chart.yaml
 │       ├── values.yaml                # App configurations
 │       └── templates/                 # Example hello-world Knative Service
+├── app/                               # Individual Knative applications (like aiplatform-dev)
+│   ├── hello-knative/                 # Example Knative app
+│   │   ├── values.yaml                # App-specific configuration
+│   │   └── application.env            # Non-sensitive environment variables
+│   └── echo-server/                   # Another example app
+│       ├── values.yaml                # App-specific configuration
+│       └── application.env            # Non-sensitive environment variables
+├── templates/                         # Knative Service template for apps
+│   └── knativeservice.yaml            # Template for Knative services
 └── README.md
 ```
-
 
 ## 🔄 GitOps Flow (Helm Modular, App-of-Apps)
 
@@ -135,7 +143,18 @@ cluster-serverless/ (separate repo)
    - cluster-serverless deploys serverless-infra subchart (Knative, Istio, Jaeger, OpenTelemetry)
    - cluster-serverless deploys serverless-app subchart (example applications)
 
-3. **Self-healing**
+3. **Knative Applications Management**
+   - Knative applications are managed in the cluster-serverless repository in the app/ directory (similar to aiplatform-dev)
+   - Each Knative app has its own directory with values.yaml and application.env
+   - Individual ArgoCD Applications can be created for each Knative app following the app generator pattern
+
+4. **Environment Variables Management**
+   - Non-sensitive environment variables are stored in `application.env` and `values.yaml` in the app directory
+   - Sensitive data is managed through Kubernetes Secrets, preferably encrypted as SealedSecrets
+   - Support for both ConfigMaps (non-sensitive) and Secrets (sensitive) environment configuration
+   - Follows security best practices: no plain text secrets in Git repositories
+
+5. **Self-healing**
    - Delete any infra or app → ArgoCD/Helm will auto-recreate from Git
    - To enable/disable components: edit `infraApps` list in `charts/infra-apps/values.yaml` → sync cluster-init ArgoCD app
 

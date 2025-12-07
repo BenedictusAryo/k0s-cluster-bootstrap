@@ -50,3 +50,4 @@ infraApps:
     chart: cloudflared
     argocdSyncWave: "0"
     helmValuesFile: cloudflare-tunnel-values.yaml
+
