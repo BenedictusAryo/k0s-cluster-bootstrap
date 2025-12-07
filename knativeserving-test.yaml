@@ -1,0 +1,16 @@
+apiVersion: operator.knative.dev/v1beta1
+kind: KnativeServing
+metadata:
+  name: knative-serving
+  namespace: knative-serving
+spec:
+  version: "1.20.0"
+  ingress:
+    kourier:
+      enabled: true
+  config:
+    network:
+      ingress-class: kourier.ingress.networking.knative.dev
+      domain-template: '{{`{{.Name}}.{{.Domain}}`}}'
+    domain:
+      benedict-aryo.com: ""

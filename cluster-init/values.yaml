@@ -5,11 +5,20 @@ applications:
     repoURL: https://github.com/BenedictusAryo/cluster-serverless.git
     targetRevision: main
     path: .
-    chart: cluster-serverless
     version: 1.0.0
     valueFiles:
       - values.yaml
     destinationNamespace: argocd
+  - name: knative-operator
+    active: true
+    namespace: argocd
+    repoURL: https://knative.github.io/operator
+    targetRevision: "1.20.0"
+    chart: knative-operator
+    version: "1.20.0"
+    destinationNamespace: knative-operator
+    # Install before cluster-serverless to provide required CRDs
+    destinationServer: https://kubernetes.default.svc
 # Default values for cluster-init Helm chart
 nameOverride: ""
 fullnameOverride: ""
