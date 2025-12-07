@@ -14,9 +14,8 @@ spec:
   project: default
   source:
     repoURL: https://metallb.github.io/metallb
-    targetRevision: main
     chart: metallb
-    version: "0.14.8"
+    targetRevision: "0.14.8"
   destination:
     server: https://kubernetes.default.svc
     namespace: metallb-system

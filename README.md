@@ -464,6 +464,15 @@ kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel
 
 **Expected result**: You should see the ArgoCD login page! 🎉
 
+#### Troubleshooting Common Tunnel Issues
+
+If you encounter 502 Bad Gateway errors:
+1. Check tunnel logs: `kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel`
+2. Look for "connection refused" or "no such host" errors
+3. Verify that the service name in Cloudflare tunnel configuration matches the actual Kubernetes service name (e.g., `cilium-gateway-cloudflare-gateway.gateway-system.svc.cluster.local`)
+
+**Note**: The tunnel pods run without `hostNetwork` to enable access to internal cluster services.
+
 #### Why Deploy Tunnel in Kubernetes vs System Service?
 
 **✅ Kubernetes Deployment (Recommended)**:
@@ -472,6 +481,7 @@ kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel
 - High availability (multiple replicas)
 - Survives node restarts
 - GitOps managed
+- Proper service networking for internal connections
 
 **❌ System Service (Not Recommended)**:
 - Only works on single node
