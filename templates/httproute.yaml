@@ -1,7 +1,5 @@
-{{- if .Values.cilium.gatewayAPI.enabled }}
+{{- if .Values.cilium.enabled }}
 ---
-<<<<<<< HEAD
-=======
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -14,7 +12,7 @@ spec:
   - name: cloudflare-gateway
     namespace: gateway-system
   hostnames:
-  - "{{ .Values.argocd.ingress.hostname }}"
+  - "{{ .Values.argocd.httproute.hostname }}"
   rules:
   - matches:
     - path:
@@ -24,5 +22,4 @@ spec:
     - name: argocd-server
       port: 80  # ArgoCD server is running with --insecure flag, so use HTTP port
       namespace: argocd
->>>>>>> 72068435a2d37b2618861df27c5f46d795ee9e15
 {{- end }}
