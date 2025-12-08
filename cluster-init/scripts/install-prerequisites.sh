@@ -24,12 +24,18 @@ if [ -f /etc/debian_version ]; then
         linux-headers-$(uname -r) \
         apparmor apparmor-utils \
         conntrack ipvsadm
-    
-    # Enable required kernel modules for Cilium
-    modprobe -a br_netfilter ip_vs ip_vs_rr ip_vs_wrr ip_vs_sh nf_conntrack
 
-    # Make kernel modules persistent
-    cat <<EOF > /etc/modules-load.d/cilium.conf
+    # Enable required kernel modules for Cilium (idempotently)
+    for module in br_netfilter ip_vs ip_vs_rr ip_vs_wrr ip_vs_sh nf_conntrack; do
+        if ! lsmod | grep -q "^${module}\b"; then
+            modprobe "$module"
+        fi
+    done
+
+    # Make kernel modules persistent (avoid duplicate entries)
+    MODULES_FILE="/etc/modules-load.d/cilium.conf"
+    if [ ! -f "$MODULES_FILE" ]; then
+        cat <<EOF > "$MODULES_FILE"
 br_netfilter
 ip_vs
 ip_vs_rr
@@ -37,15 +43,25 @@ ip_vs_wrr
 ip_vs_sh
 nf_conntrack
 EOF
+    else
+        echo "📋 Kernel modules configuration already exists."
+    fi
 
-    # Configure sysctl for Kubernetes
-    cat <<EOF > /etc/sysctl.d/k8s.conf
+    # Configure sysctl for Kubernetes (idempotently)
+    SYSCTL_FILE="/etc/sysctl.d/k8s.conf"
+    if [ ! -f "$SYSCTL_FILE" ]; then
+        cat <<EOF > "$SYSCTL_FILE"
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.ipv4.ip_forward = 1
 net.netfilter.nf_conntrack_max = 1000000
 EOF
-    sysctl --system
+        sysctl --system
+    else
+        echo "📋 Sysctl configuration already exists."
+        # Apply only the values without reloading everything
+        sysctl -p "$SYSCTL_FILE"
+    fi
 
 elif [ -f /etc/redhat-release ]; then
     # RHEL/CentOS/Fedora
@@ -55,12 +71,18 @@ elif [ -f /etc/redhat-release ]; then
         kernel-headers-$(uname -r) \
         apparmor-utils \
         conntrack-tools ipvsadm
-    
-    # Enable required kernel modules for Cilium
-    modprobe -a br_netfilter ip_vs ip_vs_rr ip_vs_wrr ip_vs_sh nf_conntrack
 
-    # Make kernel modules persistent
-    cat <<EOF > /etc/modules-load.d/cilium.conf
+    # Enable required kernel modules for Cilium (idempotently)
+    for module in br_netfilter ip_vs ip_vs_rr ip_vs_wrr ip_vs_sh nf_conntrack; do
+        if ! lsmod | grep -q "^${module}\b"; then
+            modprobe "$module"
+        fi
+    done
+
+    # Make kernel modules persistent (avoid duplicate entries)
+    MODULES_FILE="/etc/modules-load.d/cilium.conf"
+    if [ ! -f "$MODULES_FILE" ]; then
+        cat <<EOF > "$MODULES_FILE"
 br_netfilter
 ip_vs
 ip_vs_rr
@@ -68,15 +90,24 @@ ip_vs_wrr
 ip_vs_sh
 nf_conntrack
 EOF
+    else
+        echo "📋 Kernel modules configuration already exists."
+    fi
 
-    # Configure sysctl for Kubernetes
-    cat <<EOF > /etc/sysctl.d/k8s.conf
+    # Configure sysctl for Kubernetes (idempotently)
+    SYSCTL_FILE="/etc/sysctl.d/k8s.conf"
+    if [ ! -f "$SYSCTL_FILE" ]; then
+        cat <<EOF > "$SYSCTL_FILE"
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.ipv4.ip_forward = 1
 net.netfilter.nf_conntrack_max = 1000000
 EOF
-    sysctl --system
+        sysctl --system
+    else
+        echo "📋 Sysctl configuration already exists."
+        sysctl -p "$SYSCTL_FILE"
+    fi
 
 else
     echo "⚠️  Unsupported Linux distribution. Please install dependencies manually."
@@ -94,7 +125,9 @@ if ! command -v k0s &> /dev/null; then
     COMPONENTS_INSTALLED+=("k0s")
     echo "✅ k0s installed (version: $(k0s version))."
 else
-    echo "✅ k0s is already installed (version: $(k0s version))."
+    CURRENT_K0S_VERSION=$(k0s version)
+    echo "✅ k0s is already installed (version: $CURRENT_K0S_VERSION)."
+    # Optionally, you could check if the version is up to date and upgrade if needed
 fi
 echo ""
 
@@ -108,7 +141,8 @@ if ! command -v kubectl &> /dev/null; then
     COMPONENTS_INSTALLED+=("kubectl")
     echo "✅ kubectl installed (version: ${KUBECTL_VERSION})."
 else
-    echo "✅ kubectl is already installed (version: $(kubectl version --client --short 2>/dev/null || kubectl version --client))."
+    CLIENT_VERSION=$(kubectl version --client --short 2>/dev/null || kubectl version --client 2>/dev/null || echo "unknown")
+    echo "✅ kubectl is already installed (version: $CLIENT_VERSION)."
 fi
 echo ""
 
@@ -214,20 +248,20 @@ else
 fi
 echo ""
 
-# --- Install cloudflared (Cloudflare Tunnel) - FIXED FOR UBUNTU 24.04 ---
+# --- Install cloudflared (Cloudflare Tunnel) - IMPROVED FOR IDEMPOTENCY ---
 echo "--- 7/8: Installing cloudflared ---"
 if ! command -v cloudflared &> /dev/null; then
     if [ -f /etc/debian_version ]; then
-        # Ubuntu/Debian - FIXED REPOSITORY SETUP WITH FALLBACK
+        # Ubuntu/Debian - IMPROVED REPOSITORY SETUP WITH IDEMPOTENCY
         echo "📦 Setting up Cloudflare repository for Debian/Ubuntu..."
-        
+
         # Install required packages
         apt-get update -qq
-        apt-get install -y -qq software-properties-common curl
-        
+        apt-get install -y -qq software-properties-common curl ca-certificates gnupg lsb-release
+
         # Get distribution name
         DISTRO=$(lsb_release -cs)
-        
+
         # Map unsupported distros to closest supported version
         case "$DISTRO" in
             "noble"|"mantic"|"lunar")
@@ -249,47 +283,60 @@ if ! command -v cloudflared &> /dev/null; then
                 CLOUDFLARE_DISTRO=""
                 ;;
         esac
-        
+
         if [ -n "$CLOUDFLARE_DISTRO" ]; then
-            # Add Cloudflare GPG key
-            mkdir -p /usr/share/keyrings
-            curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | gpg --dearmor -o /usr/share/keyrings/cloudflare.gpg
-            
-            # Add repository based on distribution family
-            if [[ "$DISTRO" =~ ^(noble|mantic|lunar|jammy|focal|bionic)$ ]]; then
-                # Ubuntu family
-                echo "deb [signed-by=/usr/share/keyrings/cloudflare.gpg] https://pkg.cloudflare.com/cloudflared/ubuntu/ $CLOUDFLARE_DISTRO main" | tee /etc/apt/sources.list.d/cloudflare-cloudflared.list >/dev/null
+            # Add Cloudflare GPG key (avoid duplicates)
+            CLOUDFLARE_KEY_PATH="/usr/share/keyrings/cloudflare.gpg"
+            if [ ! -f "$CLOUDFLARE_KEY_PATH" ]; then
+                echo "🔐 Adding Cloudflare GPG key..."
+                mkdir -p /usr/share/keyrings
+                curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | gpg --dearmor -o "$CLOUDFLARE_KEY_PATH"
             else
-                # Debian family
-                echo "deb [signed-by=/usr/share/keyrings/cloudflare.gpg] https://pkg.cloudflare.com/cloudflared/debian/ $CLOUDFLARE_DISTRO main" | tee /etc/apt/sources.list.d/cloudflare-cloudflared.list >/dev/null
+                echo "🔐 Cloudflare GPG key already exists."
             fi
-            
+
+            # Add repository (avoid duplication)
+            REPO_FILE="/etc/apt/sources.list.d/cloudflare-cloudflared.list"
+            if [ ! -f "$REPO_FILE" ]; then
+                # Add repository based on distribution family
+                if [[ "$DISTRO" =~ ^(noble|mantic|lunar|jammy|focal|bionic)$ ]]; then
+                    # Ubuntu family
+                    echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/ubuntu/ $CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
+                else
+                    # Debian family
+                    echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/debian/ $CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
+                fi
+                echo "📋 Cloudflare repository added."
+            else
+                echo "📋 Cloudflare repository already configured."
+            fi
+
             # Update package lists and install
-            if apt-get update -qq 2>/dev/null && apt-get install -y -qq cloudflared 2>/dev/null; then
-                echo "✅ Cloudflare repository configured and cloudflared installed."
+            if apt-get update -qq && apt-get install -y -qq cloudflared; then
+                echo "✅ Cloudflared installed via repository."
             else
                 echo "⚠️  Repository installation failed - falling back to binary installation"
                 CLOUDFLARE_DISTRO=""
             fi
         fi
-        
+
         # Fallback to binary installation if repo method failed
         if [ -z "$CLOUDFLARE_DISTRO" ] || ! command -v cloudflared &> /dev/null; then
             echo "📦 Installing cloudflared from binary..."
-            
+
             ARCH=$(uname -m)
             if [[ "$ARCH" == "x86_64" ]]; then
                 ARCH="amd64"
             elif [[ "$ARCH" == "aarch64" ]]; then
                 ARCH="arm64"
             fi
-            
+
             TMP_DIR=$(mktemp -d)
             curl -L "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}" -o "${TMP_DIR}/cloudflared"
             chmod +x "${TMP_DIR}/cloudflared"
             install -o root -g root -m 0755 "${TMP_DIR}/cloudflared" /usr/local/bin/
             rm -rf "${TMP_DIR}"
-            
+
             echo "✅ cloudflared installed from binary."
         fi
         
