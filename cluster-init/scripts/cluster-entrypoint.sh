@@ -74,20 +74,26 @@ fi
 echo "\n🔑 Running secret generation scripts..."
 "$SCRIPT_DIR/generate-cloudflare-secret.sh"
 
-echo "\n🔍 Showing git diff for review:"
-git status
-GIT_DIFF=$(git diff)
-if [ -z "$GIT_DIFF" ]; then
+echo "\n🔍 Checking for changes..."
+# Check for both modified and untracked files
+ALL_CHANGES=$(git status --porcelain)
+if [ -z "$ALL_CHANGES" ]; then
   echo "✅ No changes detected. Exiting."
   exit 0
 fi
 
-echo "$GIT_DIFF" | less
+echo "📋 Detected changes:"
+echo "$ALL_CHANGES"
+
+# Show detailed diff including untracked files
+git add .  # Stage all changes including new files
+echo "\n🔍 Showing git diff for review:"
+git diff --cached
 
 echo "\n❓ Do you want to commit and push these changes to main? (y/n)"
 read -r CONFIRM
 if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-  git add .
+  git add .  # Add any new files that might have been missed
   git commit -m "Update sealed secrets (TLS, Cloudflare Tunnel) via cluster-entrypoint"
   git push origin main
   echo "\n✅ Changes pushed to main."
