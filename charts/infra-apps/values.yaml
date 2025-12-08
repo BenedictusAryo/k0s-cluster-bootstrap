@@ -35,12 +35,28 @@ infraApps:
         jsonPointers:
           - /spec/replicas
 
+  - name: istio-base
+    namespace: istio-system
+    repoUrl: https://istio-release.storage.googleapis.com/charts
+    targetRevision: "1.23.2"
+    chart: base
+    argocdSyncWave: "-2"
+    helmValuesFile: istio-base-values.yaml
+
+  - name: istiod
+    namespace: istio-system
+    repoUrl: https://istio-release.storage.googleapis.com/charts
+    targetRevision: "1.23.2"
+    chart: istiod
+    argocdSyncWave: "-1"
+    helmValuesFile: istiod-values.yaml
+
   - name: knative-operator
     namespace: knative-operator
     repoUrl: https://knative.github.io/operator
     targetRevision: "1.18.0"
     chart: knative-operator
-    argocdSyncWave: "-1"
+    argocdSyncWave: "0"
     helmValuesFile: knative-operator-values.yaml
 
   - name: cloudflare-tunnel

@@ -28,5 +28,8 @@ cloudflareTunnel:
 sealedSecrets:
   enabled: true
 
+istio:
+  enabled: true
+
 knative:
   enabled: true
