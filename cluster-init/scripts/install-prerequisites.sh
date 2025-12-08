@@ -295,9 +295,24 @@ if ! command -v cloudflared &> /dev/null; then
                 echo "🔐 Cloudflare GPG key already exists."
             fi
 
-            # Add repository (avoid duplication)
+            # Add repository (update if wrong format exists)
             REPO_FILE="/etc/apt/sources.list.d/cloudflare-cloudflared.list"
-            if [ ! -f "$REPO_FILE" ]; then
+
+            # Check if existing file has wrong format and needs update
+            NEEDS_UPDATE=false
+            if [ -f "$REPO_FILE" ]; then
+                # Check if the existing file has the old/incorrect format
+                if grep -q "cloudflared/ubuntu/\|cloudflared/debian/" "$REPO_FILE"; then
+                    echo "🔧 Updating old repository format in $REPO_FILE"
+                    NEEDS_UPDATE=true
+                else
+                    echo "📋 Cloudflare repository already configured with correct format."
+                fi
+            else
+                NEEDS_UPDATE=true
+            fi
+
+            if [ "$NEEDS_UPDATE" = true ]; then
                 # Add repository based on distribution family
                 if [[ "$DISTRO" =~ ^(noble|mantic|lunar|jammy|focal|bionic)$ ]]; then
                     # Ubuntu family
@@ -306,9 +321,7 @@ if ! command -v cloudflared &> /dev/null; then
                     # Debian family
                     echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/$CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
                 fi
-                echo "📋 Cloudflare repository added."
-            else
-                echo "📋 Cloudflare repository already configured."
+                echo "📋 Cloudflare repository updated/added."
             fi
 
             # Update package lists and install

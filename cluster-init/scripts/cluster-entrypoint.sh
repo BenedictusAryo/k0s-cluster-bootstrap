@@ -58,7 +58,23 @@ else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
 
-# 6. Run secret generation scripts
+# 6. Wait for infrastructure to be ready before generating secrets
+echo "\n⏳ Waiting for infrastructure to be ready..."
+
+# Wait for sealed secrets controller to be available
+echo "🔒 Waiting for Sealed Secrets controller (this may take a few minutes)..."
+until kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null; do
+    echo "  Waiting for sealed-secrets controller to be available..."
+    sleep 10
+done
+
+# Check if sealed secrets controller is ready
+echo "⏳ Waiting for Sealed Secrets controller to be ready..."
+kubectl wait --for=condition=available deployment/sealed-secrets-controller -n kube-system --timeout=300s
+
+echo "✅ Sealed Secrets controller is ready"
+
+# Now run secret generation scripts
 echo "\n🔑 Running secret generation scripts..."
 "$SCRIPT_DIR/generate-cloudflare-secret.sh"
 
