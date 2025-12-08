@@ -43,7 +43,19 @@ else
     echo "✅ ArgoCD is already installed"
 fi
 
-# 5.5. Apply ArgoCD root Application manifest (cluster-init)
+# 5. Install Sealed Secrets Controller (required for secret generation)
+echo "\n🔐 Installing Sealed Secrets Controller (required for secret generation)..."
+if ! kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null; then
+    # Install the Sealed Secrets controller directly to enable sealed secret generation
+    kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.2/controller.yaml
+    echo "⏳ Waiting for Sealed Secrets controller to be ready..."
+    kubectl wait --for=condition=available deployment/sealed-secrets-controller -n kube-system --timeout=180s
+    echo "✅ Sealed Secrets controller installed and ready"
+else
+    echo "✅ Sealed Secrets controller is already installed"
+fi
+
+# 6. Apply ArgoCD root Application manifest (cluster-init)
 APP_MANIFEST="$REPO_ROOT/cluster-init/cluster-init.yaml"
 if [ -f "$APP_MANIFEST" ]; then
   echo "\n📦 Applying ArgoCD root Application (cluster-init)..."
@@ -58,23 +70,7 @@ else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
 
-# 6. Wait for infrastructure to be ready before generating secrets
-echo "\n⏳ Waiting for infrastructure to be ready..."
-
-# Wait for sealed secrets controller to be available
-echo "🔒 Waiting for Sealed Secrets controller (this may take a few minutes)..."
-until kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null; do
-    echo "  Waiting for sealed-secrets controller to be available..."
-    sleep 10
-done
-
-# Check if sealed secrets controller is ready
-echo "⏳ Waiting for Sealed Secrets controller to be ready..."
-kubectl wait --for=condition=available deployment/sealed-secrets-controller -n kube-system --timeout=300s
-
-echo "✅ Sealed Secrets controller is ready"
-
-# Now run secret generation scripts
+# 7. Run secret generation scripts
 echo "\n🔑 Running secret generation scripts..."
 "$SCRIPT_DIR/generate-cloudflare-secret.sh"
 
