@@ -301,10 +301,10 @@ if ! command -v cloudflared &> /dev/null; then
                 # Add repository based on distribution family
                 if [[ "$DISTRO" =~ ^(noble|mantic|lunar|jammy|focal|bionic)$ ]]; then
                     # Ubuntu family
-                    echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/ubuntu/ $CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
+                    echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/$CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
                 else
                     # Debian family
-                    echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/debian/ $CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
+                    echo "deb [signed-by=$CLOUDFLARE_KEY_PATH] https://pkg.cloudflare.com/cloudflared/$CLOUDFLARE_DISTRO main" | tee "$REPO_FILE" >/dev/null
                 fi
                 echo "📋 Cloudflare repository added."
             else
