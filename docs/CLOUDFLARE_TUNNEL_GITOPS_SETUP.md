@@ -1,6 +1,8 @@
 # How to Enable GitOps Routing for Cloudflare Tunnel
 
-This guide shows you **exactly** what to do in Cloudflare UI and what to update in your Git repo.
+This guide shows you **exactly** what to do in Cloudflare UI and what to update in your Git repo. 
+
+**Note**: Cloudflare tunnel configuration is now managed in the `k0s-cluster-bootstrap` repository as part of the infrastructure management, not in `cluster-serverless`. This document serves as a reference to understand the tunnel setup process.
 
 ---
 
@@ -31,18 +33,18 @@ This guide shows you **exactly** what to do in Cloudflare UI and what to update 
    - Click **"Next"** to continue
 
 7. **Route tunnel page** - You'll see a form with 3 fields:
-   
+
    **⚠️ IMPORTANT: Fill in a temporary route (we'll delete it later for GitOps)**
-   
+
    Fill the form like this:
-   
+
    - **Subdomain**: `temp` (or any placeholder)
    - **Domain**: Select your domain (e.g., `benedict-aryo.com`)
    - **Type**: Select `HTTP`
    - **URL**: `http://localhost:8000` (placeholder - doesn't matter)
-   
+
    Click **"Save tunnel"**
-   
+
    **Why?** Cloudflare requires at least one route to create a tunnel. We'll delete this route later when we enable GitOps mode.
 
 8. After saving, you'll see your tunnel dashboard
@@ -167,8 +169,8 @@ spec:
 **How it works:**
 
 1. **Cloudflare Tunnel**: Receives all `*.benedict-aryo.com` traffic, sends it to the Cilium `cloudflare-gateway`
-2. **Gateway API**: Evaluates HTTPRoutes from Git—either routes directly to the service (infra apps) or forwards to Kourier for Knative hostnames
-3. **Kourier + Knative**: Handle per-revision traffic splitting for serverless workloads
+2. **Gateway API**: Evaluates HTTPRoutes from Git—either routes directly to the service (infra apps) or forwards to Istio for Knative hostnames
+3. **Istio + Knative**: Handle per-revision traffic splitting for serverless workloads
 
 ✅ **All routing logic in Git (GitOps)**
 ✅ **Only ONE static route in dashboard (never changes)**
@@ -196,7 +198,7 @@ This is actually the **best practice** approach!
 Use **Token + Gateway HTTPRoutes** (Method 2):
 1. Keep token-based tunnel (simpler) but point the wildcard route to `cloudflare-gateway`
 2. Manage every hostname—infra + Knative—via HTTPRoutes stored in Git
-3. Knative keeps creating URLs like `my-app.default.benedict-aryo.com`; the Gateway pass-through sends them to Kourier automatically
+3. Knative keeps creating URLs like `my-app.default.benedict-aryo.com`; the Gateway pass-through sends them to Istio automatically
 4. ✅ Full GitOps control of ingress without touching Cloudflare after day one
 
 You get 90% of the config-based benefits while staying in the simple token mode.
@@ -207,18 +209,14 @@ You get 90% of the config-based benefits while staying in the simple token mode.
 
 ### Step 1: Create Sealed Secret with credentials.json
 
-```bash
-# Navigate to cluster-serverless repo
-cd cluster-serverless
+**Important**: Cloudflare tunnel configuration is now managed in the `k0s-cluster-bootstrap` repository in the cluster-init scripts and templates.
 
-# Create sealed secret with credentials file
-kubectl create secret generic cloudflare-tunnel-secret \
-  --namespace=cloudflare-tunnel \
-  --from-file=credentials.json=/path/to/your/credentials.json \
-  --dry-run=client -o yaml | \
-kubeseal --controller-name=sealed-secrets-controller \
-  --controller-namespace=kube-system \
-  --format=yaml > /tmp/sealed-secret-temp.yaml
+```bash
+# Navigate to k0s-cluster-bootstrap repo (not cluster-serverless)
+cd k0s-cluster-bootstrap
+
+# Run the automated secret generation script
+./cluster-init/scripts/generate-cloudflare-secret.sh
 
 # This script will:
 # 1. Create the cloudflare tunnel secret using your tunnel token
@@ -233,20 +231,20 @@ In the k0s-cluster-bootstrap repository, edit `cluster-init/values.yaml` and upd
 ```yaml
 cloudflareTunnel:
   enabled: true
-  namespace: cloudflare-tunnel
-  
+  namespace: cloudflare
+
   # Change this to enable GitOps routing
   useConfigFile: true  # ← Change from false to true
-  
+
   # Add your Tunnel ID here
   tunnelId: "1632a9c2-9732-4e47-8754-17c9b0a23c68"  # ← Paste your Tunnel ID
-  
+
   replicas: 2
-  
+
   credentials:
     useExistingSecret: false
     secretName: cloudflare-tunnel-secret
-  
+
   # These routes are now GitOps managed!
   ingress:
     - hostname: "*.benedict-aryo.com"
@@ -314,7 +312,7 @@ After enabling GitOps mode, you MUST remove the manually configured routes from 
 5. **Delete all manually configured routes** (click X on each)
 6. Leave it **empty** - routes now come from Git!
 
-**Why?**
+**Why?** 
 - GitOps mode uses HTTPRoutes defined in Git
 - Manual dashboard routes will conflict
 - Git becomes the single source of truth
@@ -325,9 +323,9 @@ After enabling GitOps mode, you MUST remove the manually configured routes from 
 
 | What | Where | Why |
 |------|-------|-----|
-| **Tunnel ID** | `values.yaml` → `tunnelId` | Identifies your tunnel |
-| **credentials.json** | Sealed Secret → `secret.yaml` | Authenticates with Cloudflare |
-| **Routes** | `values.yaml` → `ingress` array | Defines hostname → service mappings |
+| **Tunnel ID** | `cluster-init/values.yaml` → `tunnelId` | Identifies your tunnel |
+| **credentials.json** | Sealed Secret in k0s-cluster-bootstrap | Authenticates with Cloudflare |
+| **Routes** | Git with HTTPRoute manifests | Defines hostname → service mappings |
 | **Dashboard** | Empty (no routes configured) | Git is source of truth |
 
 ---
@@ -369,7 +367,7 @@ ArgoCD syncs automatically - no dashboard needed! 🎉
 ## Troubleshooting
 
 ### "Failed to read tunnel credentials"
-- Check secret has `credentials.json` key:
+- Check secret has `credentials.json` key: 
   ```bash
   kubectl get secret cloudflare-tunnel-secret -n cloudflare -o jsonpath='{.data.credentials\.json}' | base64 -d | jq
   ```
@@ -385,8 +383,5 @@ ArgoCD syncs automatically - no dashboard needed! 🎉
 
 ### Routes not working
 - Verify dashboard has NO manual routes
-- Check tunnel status: should show "Healthy" with 2 connectors
-- Test: `curl -v https://argocd.benedict-aryo.com`
-
 - Check tunnel status: should show "Healthy" with 2 connectors
 - Test: `curl -v https://argocd.benedict-aryo.com`
