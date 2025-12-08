@@ -60,7 +60,6 @@ fi
 
 # 6. Run secret generation scripts
 echo "\n🔑 Running secret generation scripts..."
-"$SCRIPT_DIR/generate-tls-secret.sh"
 "$SCRIPT_DIR/generate-cloudflare-secret.sh"
 
 echo "\n🔍 Showing git diff for review:"
