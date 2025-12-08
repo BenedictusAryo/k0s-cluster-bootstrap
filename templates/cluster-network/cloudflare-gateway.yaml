@@ -50,7 +50,7 @@ spec:
           from: All
 {{- end }}
 ---
-{{- if and .Values.cloudflareGateway.enabled .Values.applications }}
+{{- if and .Values.cloudflareTunnel.enabled .Values.applications }}
 {{- $serverlessEnabled := false -}}
 {{- range .Values.applications -}}
 {{- if and (eq .name "cluster-serverless") (eq .active true) -}}
