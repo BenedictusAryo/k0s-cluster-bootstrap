@@ -44,7 +44,7 @@ else
 fi
 
 # 5.5. Apply ArgoCD root Application manifest (cluster-init)
-APP_MANIFEST="$REPO_ROOT/manifests/applications/cluster-init-app.yaml"
+APP_MANIFEST="$REPO_ROOT/cluster-init/cluster-init.yaml"
 if [ -f "$APP_MANIFEST" ]; then
   echo "\n📦 Applying ArgoCD root Application (cluster-init)..."
   kubectl apply -f "$APP_MANIFEST"
