@@ -1,0 +1,4 @@
+tunnelSecret:
+  # Use existing secret with Cloudflare tunnel token
+  useExistingSecret: true
+  secretName: cloudflare-tunnel-secret

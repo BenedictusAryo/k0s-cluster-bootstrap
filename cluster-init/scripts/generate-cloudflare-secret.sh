@@ -47,14 +47,14 @@ if [ -z "$TUNNEL_TOKEN" ]; then
 fi
 
 # Create namespace if not exists (for kubeseal to work)
-kubectl create namespace cloudflare-tunnel --dry-run=client -o yaml | kubectl apply -f - &>/dev/null
+kubectl create namespace cloudflare --dry-run=client -o yaml | kubectl apply -f - &>/dev/null
 
 # Create temporary secret
 echo ""
 echo "🔒 Generating sealed secret..."
 
 kubectl create secret generic cloudflare-tunnel-secret \
-  --namespace=cloudflare-tunnel \
+  --namespace=cloudflare \
   --from-literal=tunnel-token="$TUNNEL_TOKEN" \
   --dry-run=client -o yaml > /tmp/cloudflare-tunnel-secret.yaml
 

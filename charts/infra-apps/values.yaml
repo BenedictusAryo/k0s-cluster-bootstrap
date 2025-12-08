@@ -64,6 +64,6 @@ infraApps:
     repoUrl: https://cloudflare.github.io/helm-charts
     targetRevision: "0.1.12"
     chart: cloudflared
-    argocdSyncWave: "0"
+    argocdSyncWave: "1"
     helmValuesFile: cloudflare-tunnel-values.yaml
 
