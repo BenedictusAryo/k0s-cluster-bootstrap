@@ -70,7 +70,30 @@ else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
 
-# 7. Run secret generation scripts
+# 7. Collect Cloudflare Tunnel information and update configuration
+echo "\n🔐 Configuring Cloudflare Tunnel..."
+
+# Ask for tunnel ID
+read -p "Enter Cloudflare Tunnel ID: " TUNNEL_ID
+if [ -z "$TUNNEL_ID" ]; then
+    echo "❌ Tunnel ID is required"
+    exit 1
+fi
+
+# Update the values.yaml file with the tunnel ID
+# Replace the tunnelId field regardless of its current value
+sed -i "/^cloudflareTunnel:/,/^[^[:space:]]/{
+    s/^[[:space:]]*tunnelId:.*/  tunnelId: \"$TUNNEL_ID\"/
+}" "$REPO_ROOT/values.yaml"
+
+# Enable the cloudflare tunnel in the same section
+sed -i "/^cloudflareTunnel:/,/^[^[:space:]]/{
+    s/^[[:space:]]*enabled:[[:space:]]*false/  enabled: true/
+}" "$REPO_ROOT/values.yaml"
+
+echo "✅ Cloudflare Tunnel ID configured: $TUNNEL_ID"
+
+# Run secret generation scripts
 echo "\n🔑 Running secret generation scripts..."
 "$SCRIPT_DIR/generate-cloudflare-secret.sh"
 
