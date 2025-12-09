@@ -19,8 +19,8 @@ certificateManager:
     email: "admin@benedict-aryo.com"  # Replace with your Cloudflare email
 
 cloudflareTunnel:
-  enabled: false
-  tunnelId: ""
+  enabled: true
+  tunnelId: "0ce50236-7a62-4a88-9bed-a0e1b60d0e81"
   namespace: "default"
   useConfigFile: false
   ingress: []
