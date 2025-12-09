@@ -1,0 +1,22 @@
+{{- if .Values.certificateManager.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: benedict-aryo-com-tls
+  namespace: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  secretName: benedict-aryo-com-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - "*.benedict-aryo.com"
+  - "benedict-aryo.com"
+  {{- if .Values.certificateManager.cloudflare.email }}
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days
+  {{- end }}
+{{- end }}
