@@ -102,48 +102,7 @@ else
   exit 1
 fi
 
-# 7. Install or upgrade the k0s-cluster-bootstrap Helm chart
-echo "\n🚀 Installing or upgrading the k0s-cluster-bootstrap Helm chart..."
-helm upgrade --install k0s-cluster-bootstrap .
-
-# 8. Optionally trigger ArgoCD sync (using kubectl instead of CLI)
-echo "\n🔄 Optionally trigger ArgoCD application sync? (y/n)"
-read -r SYNC_CONFIRM
-if [[ "$SYNC_CONFIRM" =~ ^[Yy]$ ]]; then
-  read -p "Enter ArgoCD app name (default: cluster-init): " APP_NAME
-  APP_NAME=${APP_NAME:-cluster-init}
-
-  # Check if the ArgoCD Application exists
-  echo "🔍 Checking if ArgoCD Application '$APP_NAME' exists..."
-  if kubectl get application "$APP_NAME" -n argocd &>/dev/null; then
-    echo "✅ ArgoCD Application '$APP_NAME' exists, triggering sync..."
-
-    # Trigger hard sync by patching the Application with sync options and annotation
-    kubectl patch application "$APP_NAME" -n argocd --type merge -p '{
-      "spec": {
-        "syncPolicy": {
-          "syncOptions": ["Prune=true", "Replace=true"]
-        }
-      },
-      "metadata": {
-        "annotations": {
-          "argocd.argoproj.io/sync": "true"
-        }
-      }
-    }'
-
-    if [ $? -eq 0 ]; then
-      echo "✅ Sync triggered for ArgoCD Application '$APP_NAME'."
-      echo "📊 Check sync status with: kubectl get application $APP_NAME -n argocd"
-      echo "💡 Alternative: Use ArgoCD UI at https://argocd.benedict-aryo.com"
-    else
-      echo "❌ Failed to trigger sync for '$APP_NAME'."
-      echo "💡 Alternative: Manually sync in ArgoCD UI or use:"
-      echo "   kubectl patch application $APP_NAME -n argocd --type merge -p '{\"operation\":{\"sync\":{}}}'"
-    fi
-  else
-    echo "❌ ArgoCD Application '$APP_NAME' does not exist in namespace argocd."
-    echo "📋 Available ArgoCD Applications:"
-    kubectl get applications -n argocd 2>/dev/null || echo "No applications found or ArgoCD not ready yet."
-  fi
-fi
+echo "\n🔄 The cluster-init ArgoCD Application will now sync the infrastructure from Git."
+echo "📊 Monitor sync status: kubectl get application cluster-init -n argocd"
+echo "💡 ArgoCD UI: https://argocd.benedict-aryo.com"
+echo "   The cluster-init application automatically manages all infrastructure via GitOps."
