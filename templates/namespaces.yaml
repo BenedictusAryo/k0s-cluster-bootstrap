@@ -1,0 +1,19 @@
+{{- if .Values.cloudflareTunnel.enabled }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.cloudflareTunnel.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+{{- end }}
+
+{{- if .Values.cilium.enabled }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+{{- end }}
