@@ -63,9 +63,9 @@ kubeseal --controller-name=sealed-secrets-controller \
   --format=yaml < /tmp/cloudflare-tunnel-secret.yaml > /tmp/cloudflare-tunnel-sealed.yaml
 
 # Move sealed secret to templates directory
-TARGET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/templates/cloudflare-tunnel"
+TARGET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/templates"
 mkdir -p "$TARGET_DIR"
-cp /tmp/cloudflare-tunnel-sealed.yaml "$TARGET_DIR/secret.yaml"
+cp /tmp/cloudflare-tunnel-sealed.yaml "$TARGET_DIR/cloudflare-tunnel-secret.yaml"
 
 rm /tmp/cloudflare-tunnel-secret.yaml /tmp/cloudflare-tunnel-sealed.yaml
 
