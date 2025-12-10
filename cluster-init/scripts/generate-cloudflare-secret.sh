@@ -53,7 +53,7 @@ kubectl create namespace cloudflare --dry-run=client -o yaml | kubectl apply -f 
 echo ""
 echo "🔒 Generating sealed secret..."
 
-kubectl create secret generic cloudflare-tunnel-secret \
+kubectl create secret generic cloudflare-tunnel \
   --namespace=cloudflare \
   --from-literal=tunnel-token="$TUNNEL_TOKEN" \
   --dry-run=client -o yaml > /tmp/cloudflare-tunnel-secret.yaml
