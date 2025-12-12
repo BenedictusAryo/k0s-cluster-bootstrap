@@ -125,6 +125,12 @@ else
   exit 1
 fi
 
+# 8. Trigger ArgoCD sync for cluster-init application
+kubectl patch application cluster-init -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/compare-result":"","argocd.argoproj.io/sync":"true"}}}'
+kubectl patch application cluster-init -n argocd -p '{"spec":{"syncPolicy":{"syncOptions":["Prune=true"]}}}' --type merge
+echo "✅ ArgoCD sync triggered"
+
+
 echo "\n🔄 The cluster-init ArgoCD Application will now sync the infrastructure from Git."
 echo "📊 Monitor sync status: kubectl get application cluster-init -n argocd"
 echo "💡 ArgoCD UI: https://argocd.benedict-aryo.com"
