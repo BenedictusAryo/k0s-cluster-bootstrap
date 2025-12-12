@@ -26,7 +26,7 @@ infraApps:
   - name: sealed-secrets
     namespace: kube-system
     repoUrl: https://charts.bitnami.com/bitnami
-    targetRevision: 2.17.0
+    targetRevision: 2.5.19
     chart: sealed-secrets
     argocdSyncWave: "-2"
     ignoreDifferences:
