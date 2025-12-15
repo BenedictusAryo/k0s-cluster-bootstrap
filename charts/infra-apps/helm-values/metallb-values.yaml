@@ -1,0 +1,6 @@
+# Default values for MetalLB
+# This is a placeholder. IP address range will be configured via cluster-init script.
+speaker:
+  enabled: true
+controller:
+  enabled: true

@@ -70,32 +70,21 @@ else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
 
-# 7. Collect Cloudflare Tunnel information and update configuration
-echo "\n🔐 Configuring Cloudflare Tunnel..."
 
-# Ask for tunnel ID
-read -p "Enter Cloudflare Tunnel ID: " TUNNEL_ID
-if [ -z "$TUNNEL_ID" ]; then
-    echo "❌ Tunnel ID is required"
+
+# 7. Configure MetalLB IP Address Pool
+echo "\n🌐 Configuring MetalLB IP Address Pool..."
+
+read -p "Enter the IP address range for MetalLB (e.g., 192.168.1.200-192.168.1.250): " METALLB_IP_RANGE
+if [ -z "$METALLB_IP_RANGE" ]; then
+    echo "❌ MetalLB IP address range is required"
     exit 1
 fi
 
-# Update the values.yaml file with the tunnel ID
-# Replace the tunnelId field regardless of its current value
-sed -i "/^cloudflareTunnel:/,/^[^[:space:]]/{
-    s/^[[:space:]]*tunnelId:.*/  tunnelId: \"$TUNNEL_ID\"/
-}" "$REPO_ROOT/values.yaml"
+# Update the IP address pool in the ip-address-pool.yaml template
+sed -i "s|{{ .Values.metalLb.ipAddressPool.range }}|${METALLB_IP_RANGE}|g" "$REPO_ROOT/templates/metallb/ip-address-pool.yaml"
 
-# Enable the cloudflare tunnel in the same section
-sed -i "/^cloudflareTunnel:/,/^[^[:space:]]/{
-    s/^[[:space:]]*enabled:[[:space:]]*false/  enabled: true/
-}" "$REPO_ROOT/values.yaml"
-
-echo "✅ Cloudflare Tunnel ID configured: $TUNNEL_ID"
-
-# Run secret generation scripts
-echo "\n🔑 Running secret generation scripts..."
-"$SCRIPT_DIR/generate-cloudflare-secret.sh"
+echo "✅ MetalLB IP Address Pool configured: $METALLB_IP_RANGE"
 
 echo "\n🔍 Checking for changes..."
 # Check for both modified and untracked files
@@ -117,19 +106,13 @@ echo "\n❓ Do you want to commit and push these changes to main? (y/n)"
 read -r CONFIRM
 if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
   git add .  # Add any new files that might have been missed
-  git commit -m "Update sealed secrets (TLS, Cloudflare Tunnel) via cluster-entrypoint"
+  git commit -m "Configure MetalLB IP Address Pool via cluster-entrypoint"
   git push origin main
   echo "\n✅ Changes pushed to main."
 else
   echo "❌ Aborted by user. No changes committed."
   exit 1
 fi
-
-# 8. Trigger ArgoCD sync for cluster-init application
-kubectl patch application cluster-init -n argocd --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/compare-result":"","argocd.argoproj.io/sync":"true"}}}'
-kubectl patch application cluster-init -n argocd -p '{"spec":{"syncPolicy":{"syncOptions":["Prune=true"]}}}' --type merge
-echo "✅ ArgoCD sync triggered"
-
 
 echo "\n🔄 The cluster-init ArgoCD Application will now sync the infrastructure from Git."
 echo "📊 Monitor sync status: kubectl get application cluster-init -n argocd"

@@ -59,11 +59,13 @@ infraApps:
     argocdSyncWave: "0"
     helmValuesFile: knative-operator-values.yaml
 
-  - name: cloudflare-tunnel
-    namespace: cloudflare
-    repoUrl: https://cloudflare.github.io/helm-charts
-    targetRevision: "0.3.2"
-    chart: cloudflare-tunnel
+  - name: metallb
+    namespace: metallb-system
+    repoUrl: https://charts.bitnami.com/bitnami
+    targetRevision: 6.4.22
+    chart: metallb
     argocdSyncWave: "1"
-    helmValuesFile: cloudflare-tunnel-values.yaml
+    helmValuesFile: metallb-values.yaml
+
+
 

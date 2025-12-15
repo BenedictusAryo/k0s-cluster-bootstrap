@@ -33,39 +33,39 @@ argocd:
 
 # k0s-cluster-bootstrap (Helm Modular)
 
-Helm-based, GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets), [Cilium](https://cilium.io/), and [Cloudflare Gateway](https://www.cloudflare.com/).
+Helm-based, GitOps-powered Kubernetes cluster bootstrap for **VPS/Homelab** deployments using [k0s](https://k0sproject.io/), [ArgoCD](https://argo-cd.readthedocs.io/), [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets), [Cilium](https://cilium.io/), and [MetalLB](https://metallb.universe.tf/).
 
 > 🏡 **Serverless Platform for VPS/Homelab with Full GitOps**
 > 
 
 > This setup provides:
-> - **Single Helm chart (`cluster-init`)**: Manages all cluster-wide infrastructure (Cilium, Sealed Secrets, ArgoCD, Cloudflare Gateway, etc.)
+> - **Single Helm chart (`cluster-init`)**: Manages all cluster-wide infrastructure (Cilium, Sealed Secrets, ArgoCD, MetalLB, etc.)
 > - **App-of-Apps Pattern**: ArgoCD Application CRs (templated) reference the cluster-serverless Helm chart for serverless workloads
-> - **Interactive secret generation**: Scripts for TLS and Cloudflare Tunnel secrets, with git diff/commit/push before ArgoCD sync
+> - **Interactive secret generation**: Scripts for TLS secrets, with git diff/commit/push before ArgoCD sync
 > - **Self-healing GitOps**: All infra is declarative, version-controlled, and auto-reconciled
-> - **Works behind CGNAT, VPS, or hybrid deployments**
+> - **Exposes services with Public IP, works behind CGNAT, VPS, or hybrid deployments**
 
 ## 💡 Why This Setup?
 
 **Traditional Kubernetes challenges**:
-- ❌ Requires static public IP
-- ❌ Complex port forwarding setup
+- ❌ Requires static public IP (can be solved with MetalLB)
+- ❌ Complex port forwarding setup (simplified with MetalLB)
 - ❌ Manual SSL certificate management
-- ❌ Doesn't work behind CGNAT
+- ❌ Doesn't work behind CGNAT (can be solved with MetalLB and proper routing)
 - ❌ Heavy resource requirements
 - ❌ Manual infrastructure management
 
 **Our solution**:
-- ✅ **Cloudflare Tunnel** (no public IP needed)
-- ✅ **Cilium Gateway + Cloudflare** (no port forwarding needed)
+- ✅ **MetalLB** (exposes services with public IP)
+- ✅ **Cilium Gateway + MetalLB** (simplified port forwarding)
 - ✅ **cert-manager + Let's Encrypt** (automatic certificate management)
-- ✅ **Works behind CGNAT** (via Cloudflare Tunnels)
+- ✅ **Works behind CGNAT** (via MetalLB and a reverse proxy on the host if needed)
 - ✅ **k0s lightweight** (single binary, low resources)
 - ✅ **GitOps with ArgoCD** (infrastructure as code)
 - ✅ **Serverless Platform**: Knative for scale-to-zero workloads
 - ✅ **App-of-Apps GitOps**: cluster-init manages all infrastructure
 - ✅ **Self-Healing**: Delete any app, it auto-recreates via GitOps
-- ✅ Works behind CGNAT with Cloudflare Tunnel
+- ✅ Exposes services with Public IP and works behind CGNAT with MetalLB
 - ✅ Lightweight k0s (50-70% less resources than full K8s)
 
 
@@ -93,8 +93,7 @@ k0s-cluster-bootstrap/
 │       ├── install-prerequisites.sh
 │       ├── install-k0s-controller.sh
 │       ├── install-k0s-worker.sh
-│       ├── generate-tls-secret.sh
-│       └── generate-cloudflare-secret.sh
+
 ├── config/
 │   └── k0s.yaml
 └── README.md
@@ -199,7 +198,7 @@ This script will:
 1. Install **Gateway API CRDs** (required for Cilium Gateway)
 2. Install **Cilium CLI** if not present
 3. Install **ArgoCD** (GitOps engine - bootstrap only)
-4. Generate **TLS certificates** and **Cloudflare Tunnel secrets**
+4. Generate **TLS certificates**
 5. Show **git diff** for review, prompt to **commit/push**
 6. Create the **`cluster-init` ArgoCD Application** (manages all infrastructure via infra-apps)
 
@@ -241,68 +240,25 @@ This enables:
 - ✅ **OpenTelemetry** (observability)
 - ✅ **Example hello-world app**
 
-#### Step 4: Configure Cloudflare (Already Done in Bootstrap)
+#### Step 4: Configure MetalLB IP Address Pool
 
-The bootstrap script already generated Cloudflare Tunnel secrets and configured the infrastructure. The single wildcard route sends all `*.benedict-aryo.com` traffic to the Cilium Gateway, which routes to:
+The `cluster-entrypoint.sh` script will prompt you for the IP address range to be used by MetalLB. This range should consist of IP addresses available on your network that MetalLB can allocate to LoadBalancer services.
 
-- **ArgoCD UI**: `https://argocd.benedict-aryo.com`
-- **Jaeger UI**: `https://jaeger.benedict-aryo.com` (when serverless enabled)
-- **Knative apps**: `https://<app-name>.benedict-aryo.com` (when serverless enabled)
+**Example**: `192.168.1.240-192.168.1.250`
 
-**Verify routing works:**
-```bash
-# Check Cilium Gateway
-kubectl get gateway -A
+Ensure these IP addresses are not already in use and are within the same subnet as your cluster nodes.
 
-# Test ArgoCD access
-curl -k https://argocd.benedict-aryo.com
-```
+#### How it works (MetalLB)
+
+MetalLB operates in two modes: Layer 2 (ARP/NDP) and BGP. For most homelab/VPS setups, Layer 2 mode is sufficient and simpler to configure.
+
+1. **MetalLB Speaker**: A speaker pod runs on each node, advertising IP addresses from the configured pool using standard Layer 2 networking protocols (ARP for IPv4, NDP for IPv6).
+2. **IPAddressPool**: You define a range of IP addresses (the pool) that MetalLB can use.
+3. **L2Advertisement**: This resource tells MetalLB to advertise the IPs from a specific `IPAddressPool` using Layer 2 mode.
+4. **Service Type LoadBalancer**: When you create a Kubernetes Service of type `LoadBalancer`, MetalLB will assign an IP address from its pool to that service.
+5. **Direct Access**: Traffic to the LoadBalancer IP will be routed directly to your cluster nodes.
 
 All application routing is managed via Kubernetes manifests in Git:
-
-**For infrastructure services** (ArgoCD, Jaeger, etc.):
-```yaml
-# Example: ArgoCD Gateway HTTPRoute
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-   name: argocd-route
-   namespace: argocd
-spec:
-   parentRefs:
-   - name: cloudflare-gateway
-      namespace: gateway-system
-   hostnames:
-   - argocd.benedict-aryo.com
-   rules:
-   - backendRefs:
-      - name: argocd-server
-         namespace: argocd
-         port: 443
-```
-
-**For serverless applications**:
-```yaml
-# Knative Service - automatically creates route
-apiVersion: serving.knative.dev/v1
-kind: Service
-metadata:
-  name: my-app
-  namespace: default
-spec:
-  template:
-    spec:
-      containers:
-      - image: gcr.io/knative-samples/helloworld-go
-```
-Automatically accessible at: `my-app.default.benedict-aryo.com`
-
-**How it works**:
-1. User accesses `argocd.benedict-aryo.com`
-2. Cloudflare routes to the `cloudflare-gateway` (via wildcard route)
-3. Gateway matches the HTTPRoute and forwards directly to `argocd-server`
-4. For Knative hostnames, the wildcard HTTPRoute forwards to the Istio Gateway, which performs revision-level routing
-5. **All routing logic in Git!** 🎉
 
 #### Step 4: Verify Deployment
 
@@ -318,214 +274,9 @@ kubectl get app -n argocd
 # sealed-secrets             Synced        Healthy
 
 
-#### Step 2: Deploy cluster-init Helm Chart & Run Entrypoint
 
-```bash
-# From the root of the repo
-cd cluster-init
-helm install cluster-init .
 
-# Run the entrypoint script for secret generation and GitOps flow
-cd scripts
-./cluster-entrypoint.sh
-# This will:
-# - Prompt for secret values (TLS, Cloudflare Tunnel, etc.)
-# - Show a git diff and prompt for confirmation
-# - Commit and push changes to main
-# - Trigger ArgoCD sync
-```
 
-#### Step 3: Configure Cloudflare Tunnel (One-Time)
-
-In Cloudflare Zero Trust Dashboard, create just **ONE wildcard route**:
-- **Subdomain**: `*` (wildcard)
-- **Domain**: your domain (e.g., `benedict-aryo.com`)
-- **Type**: `HTTPS`
-- **URL**: `https://cloudflare-gateway.gateway-system.svc.cluster.local:443`
-- **TLS Options**: Enable "No TLS Verify"
-
-**All further routing is managed in Git via HTTPRoutes and ArgoCD Applications.**
-```
-
-3. Apply the sealed secret:
-
-```bash
-kubectl apply -f secrets/my-sealed-secret.yaml
-```
-
-4. Commit only the sealed secret to Git (never commit the unsealed version)
-
-### Setting up Cloudflare Tunnel (Required for App Access)
-
-Cloudflare Tunnel provides secure access to your applications without exposing ports to the internet.
-
-#### Step 1: Create Cloudflare Tunnel
-
-1. Log in to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
-2. Navigate to **Networks** → **Tunnels**
-3. Click **Create a tunnel**
-4. Choose **Cloudflared** as the connector type
-5. Name your tunnel (e.g., `k0s-cluster-tunnel`)
-6. Copy the tunnel token (starts with `eyJh...`)
-
-#### Step 2: Create Kubernetes Secret
-
-**IMPORTANT**: Deploy the tunnel **inside Kubernetes**, not as a system service. This ensures it works across all deployment scenarios (VPS, Hybrid, Homelab).
-
-```bash
-# Create the cloudflare-tunnel namespace
-kubectl create namespace cloudflare-tunnel
-
-# Create and seal the secret in one step (no plain secret stored!)
-kubectl create secret generic cloudflare-tunnel-secret \
-  --from-literal=tunnel-token="eyJhIjoiMDJkYjBlMDJjODNiMjg0MGIyZWM3NGM4MjAxNWQ1YW..." \
-  -n cloudflare-tunnel \
-  --dry-run=client -o yaml | \
-  kubeseal --controller-name=sealed-secrets --controller-namespace=kube-system \
-  -o yaml > manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
-
-# Apply the sealed secret
-kubectl apply -f manifests/sealed-secrets/secrets/cloudflare-tunnel-sealed.yaml
-
-# Verify the secret was created
-kubectl get secret cloudflare-tunnel-secret -n cloudflare-tunnel
-```
-
-**Note**: Sealed secrets are **safe to commit to Git**! They're encrypted and can only be decrypted by your cluster's Sealed Secrets Controller.
-
-#### Step 3: Find Service Names for Routing
-
-Before configuring Cloudflare routes, you need to find the internal Kubernetes service names:
-
-```bash
-# List all services to find service names
-kubectl get svc -A
-
-# Get specific service details
-kubectl get svc -n argocd
-kubectl get svc -n istio-system
-kubectl get svc -n observability
-```
-
-**Understanding Kubernetes DNS format:**
-```
-<service-name>.<namespace>.svc.cluster.local:<port>
-
-Examples:
-- argocd-server.argocd.svc.cluster.local:443
-- istio-ingressgateway.istio-system.svc.cluster.local:80
-- jaeger-query.observability.svc.cluster.local:16686
-```
-
-**Key services in this setup:**
-- **ArgoCD**: Service `argocd-server` in namespace `argocd`, port `443`
-- **Istio Ingress Gateway**: Service `istio-ingressgateway` in namespace `istio-system`, port `80`
-- **Jaeger**: Service `jaeger-query` in namespace `observability`, port `16686`
-
-#### Step 4: Configure Public Hostnames
-
-In the Cloudflare Zero Trust Dashboard, configure your tunnel routes:
-
-1. **ArgoCD** (for GitOps management):
-   - Subdomain: `argocd`
-   - Domain: `your-domain.com`
-   - Service Type: `HTTPS`
-   - URL: `argocd-server.argocd.svc.cluster.local:443`
-   - Additional settings → TLS → Enable **"No TLS Verify"** ✅
-   
-   **Why "No TLS Verify"?** ArgoCD uses internal certificates. This setting tells Cloudflare Tunnel to trust the internal certificate. Your traffic is still encrypted end-to-end.
-
-2. **Jaeger** (optional, for observability):
-   - Subdomain: `jaeger`
-   - Domain: `your-domain.com`
-   - Service Type: `HTTP`
-   - URL: `jaeger-query.observability.svc.cluster.local:16686`
-
-3. **Knative Services** (wildcard for all apps):
-   - Subdomain: `*` (wildcard)
-   - Domain: `your-domain.com`
-   - Service Type: `HTTP`
-   - URL: `istio-ingressgateway.istio-system.svc.cluster.local:80`
-
-4. **Catch-all rule**: `http_status:404`
-
-**Important Notes**:
-- ⚠️ **Route Order Matters**: Place specific routes (argocd, jaeger) BEFORE the wildcard route
-- ✅ The wildcard route handles all Knative services (e.g., `hello.your-domain.com`, `api.your-domain.com`)
-- ✅ These URLs use Kubernetes internal DNS - they only work from inside the cluster (where the tunnel pod runs)
-
-#### Step 5: Create DNS Records
-
-In the Cloudflare DNS dashboard (not Zero Trust):
-
-1. Add CNAME record for ArgoCD:
-   - **Type**: `CNAME`
-   - **Name**: `argocd`
-   - **Target**: `<your-tunnel-id>.cfargotunnel.com` (find this in your tunnel settings)
-   - **Proxy status**: ✅ Proxied (orange cloud)
-
-2. Add CNAME record for Jaeger (optional):
-   - **Name**: `jaeger`
-   - **Target**: `<your-tunnel-id>.cfargotunnel.com`
-   - **Proxy status**: ✅ Proxied
-
-3. Add wildcard CNAME for Knative services:
-   - **Name**: `*`
-   - **Target**: `<your-tunnel-id>.cfargotunnel.com`
-   - **Proxy status**: ✅ Proxied
-
-#### Step 6: Enable Cloudflare Tunnel in Helm Chart
-
-After creating the sealed secret, enable the tunnel in your cluster-serverless infrastructure:
-
-```bash
-# Edit infra/values.yaml in cluster-serverless repo
-cloudflareTunnel:
-  enabled: true  # Change from false to true
-```
-
-Commit and push the change. ArgoCD will automatically deploy the tunnel pods.
-
-#### Step 7: Verify Tunnel Deployment
-
-```bash
-# Check tunnel pods are running
-kubectl get pods -n cloudflare-tunnel
-
-# Check tunnel logs
-kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel
-
-# Test access from your browser
-# Visit: https://argocd.your-domain.com
-```
-
-**Expected result**: You should see the ArgoCD login page! 🎉
-
-#### Troubleshooting Common Tunnel Issues
-
-If you encounter 502 Bad Gateway errors:
-1. Check tunnel logs: `kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel`
-2. Look for "connection refused" or "no such host" errors
-3. Verify that the service name in Cloudflare tunnel configuration matches the actual Kubernetes service name (e.g., `cilium-gateway-cloudflare-gateway.gateway-system.svc.cluster.local`)
-
-**Note**: The tunnel pods run without `hostNetwork` to enable access to internal cluster services.
-
-#### Why Deploy Tunnel in Kubernetes vs System Service?
-
-**✅ Kubernetes Deployment (Recommended)**:
-- Works across all scenarios (VPS, Hybrid, Homelab)
-- Uses cluster DNS (e.g., `argocd-server.argocd.svc.cluster.local`)
-- High availability (multiple replicas)
-- Survives node restarts
-- GitOps managed
-- Proper service networking for internal connections
-
-**❌ System Service (Not Recommended)**:
-- Only works on single node
-- Can't use cluster DNS names
-- Requires NodePort or port-forwarding
-- Manual configuration on each node
-- Not GitOps managed
 
 ## 📖 Configuration
 
@@ -604,6 +355,13 @@ Or use the ArgoCD UI at `https://argocd.benedict-aryo.com`
 
 - Verify controller is running: `kubectl get pods -n sealed-secrets`
 - Check controller logs: `kubectl logs -n sealed-secrets -l app.kubernetes.io/name=sealed-secrets-controller`
+
+### MetalLB not assigning IPs
+
+- Verify MetalLB speaker and controller pods are running: `kubectl get pods -n metallb-system`
+- Check MetalLB controller logs: `kubectl logs -n metallb-system -l app.kubernetes.io/component=controller`
+- Check IPAddressPool and L2Advertisement configuration: `kubectl get ipaddresspool -n metallb-system` and `kubectl get l2advertisement -n metallb-system`
+- Ensure your IP address range is valid and not in use by other devices.
 
 ## 📚 Additional Resources
 
