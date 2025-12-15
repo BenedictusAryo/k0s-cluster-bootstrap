@@ -16,12 +16,12 @@ This document summarizes the comprehensive enhancements made to the k0s-cluster-
 
 ### 2. Certificate Management with cert-manager
 - **Before**: Self-signed certificates generated using OpenSSL in bootstrap scripts
-- **After**: Automated Let's Encrypt certificates via cert-manager with DNS-01 challenge
+- **After**: Automated Let's Encrypt certificates via cert-manager with HTTP-01 challenge (using MetalLB LoadBalancer services for validation)
 - **Impact**: Production-ready security, automatic certificate renewals, no manual certificate management
 - **Files Modified**:
   - `/cluster-init/scripts/generate-tls-secret.sh`
   - `/templates/certificate-manager/` (new directory)
-  - `/templates/cluster-network/cloudflare-gateway.yaml`
+  - `/templates/cluster-network/external-gateway.yaml`
   - `/values.yaml`
 
 ### 3. Infrastructure as ArgoCD Applications
@@ -134,7 +134,7 @@ k0s-cluster-bootstrap/
 │       ├── install-k0s-controller.sh
 │       ├── install-k0s-worker.sh
 │       ├── generate-tls-secret.sh
-│       └── generate-cloudflare-secret.sh
+│       └── configure-metallb-pool.sh
 ├── config/
 │   └── k0s.yaml
 └── README.md

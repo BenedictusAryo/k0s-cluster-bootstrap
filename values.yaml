@@ -15,15 +15,15 @@ cilium:
 certificateManager:
   enabled: true
   email: "admin@benedict-aryo.com"  # Replace with your email
-  cloudflare:
-    email: "admin@benedict-aryo.com"  # Replace with your Cloudflare email
+  # Using HTTP-01 challenge with MetalLB LoadBalancer services
+  acmeServerUrl: "https://acme-v02.api.letsencrypt.org/directory"  # Use "https://acme-staging-v02.api.letsencrypt.org/directory" for testing
 
-cloudflareTunnel:
-  enabled: true
-  tunnelId: "0ce50236-7a62-4a88-9bed-a0e1b60d0e81"
-  namespace: "default"
-  useConfigFile: false
-  ingress: []
+metalLb:
+  ipAddressPool:
+    enabled: true
+    # The IP range will be configured by the cluster-entrypoint.sh script
+    # Example: range: "192.168.1.240-192.168.1.250"
+    range: ""
 
 sealedSecrets:
   enabled: true

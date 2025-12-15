@@ -8,8 +8,8 @@ This directory contains all scripts required for initial cluster bootstrap, secr
 - `install-k0s-controller.sh`: Installs and configures the k0s controller node
 - `install-k0s-worker.sh`: Installs and joins a k0s worker node
 - `generate-tls-secret.sh`: Interactive script to generate and seal TLS secrets
-- `generate-cloudflare-secret.sh`: Interactive script to generate and seal Cloudflare Tunnel secrets
-- `cluster-entrypoint.sh`: Main entrypoint for secret generation, git diff/commit/push, and ArgoCD sync
+- `configure-metallb-pool.sh`: Interactive script to configure MetalLB IP address pool
+- `cluster-entrypoint.sh`: Main entrypoint for infrastructure setup, MetalLB configuration, git diff/commit/push, and ArgoCD sync
 
 ## Usage
 
@@ -20,6 +20,7 @@ This directory contains all scripts required for initial cluster bootstrap, secr
 ## Troubleshooting
 
 After running the scripts:
-- Verify that the Cloudflare tunnel pods are running and not using hostNetwork: `kubectl get pods -n cloudflare-tunnel -o yaml | grep -i hostNetwork`
+- Verify that MetalLB pods are running: `kubectl get pods -n metallb-system`
 - Check that gateway services are accessible: `kubectl get svc -n gateway-system`
-- Review tunnel logs for connectivity issues: `kubectl logs -n cloudflare-tunnel -l app.kubernetes.io/name=cloudflare-tunnel`
+- Verify MetalLB IP pool configuration: `kubectl get ipaddresspool -n metallb-system`
+- Review MetalLB controller logs: `kubectl logs -n metallb-system -l app.kubernetes.io/component=controller`

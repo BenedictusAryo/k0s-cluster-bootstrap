@@ -15,8 +15,6 @@ spec:
   dnsNames:
   - "*.benedict-aryo.com"
   - "benedict-aryo.com"
-  {{- if .Values.certificateManager.cloudflare.email }}
   duration: 2160h # 90 days
   renewBefore: 360h # 15 days
-  {{- end }}
 {{- end }}

@@ -81,10 +81,16 @@ if [ -z "$METALLB_IP_RANGE" ]; then
     exit 1
 fi
 
-# Update the IP address pool in the ip-address-pool.yaml template
-sed -i "s|{{ .Values.metalLb.ipAddressPool.range }}|${METALLB_IP_RANGE}|g" "$REPO_ROOT/templates/metallb/ip-address-pool.yaml"
+# Create a cluster-specific values override file
+CLUSTER_VALUES_FILE="$REPO_ROOT/cluster-values.yaml"
+cat > "$CLUSTER_VALUES_FILE" << EOF
+metalLb:
+  ipAddressPool:
+    range: "$METALLB_IP_RANGE"
+EOF
 
 echo "✅ MetalLB IP Address Pool configured: $METALLB_IP_RANGE"
+echo "📋 Configuration saved to: $CLUSTER_VALUES_FILE"
 
 echo "\n🔍 Checking for changes..."
 # Check for both modified and untracked files
