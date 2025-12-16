@@ -7,16 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
-# 1. Install Gateway API CRDs (required for Cilium Gateway)
-echo "📦 Installing Gateway API CRDs (required for Cilium Gateway)..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
-echo "✅ Gateway API CRDs installed"
-
-# 2. Install Cilium CLI if not present
+# 1. Install Cilium CNI first (before any other networking-dependent components)
+echo "📦 Installing Cilium CNI as the primary network plugin (required before other components)..."
 if ! command -v cilium &> /dev/null; then
     echo "   Installing Cilium CLI..."
     CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
@@ -27,6 +19,24 @@ if ! command -v cilium &> /dev/null; then
     sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
     rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
 fi
+
+# Install Cilium with basic configuration to ensure networking works before deploying other components
+cilium install --version 1.15.3 --namespace kube-system --set kubeProxyReplacement=disabled --set k8sServiceHost=localhost --set k8sServicePort=6443
+
+# Wait for Cilium to be ready before proceeding
+echo "⏳ Waiting for Cilium to be ready..."
+kubectl wait --for=condition=ready pods -l k8s-app=cilium -n kube-system --timeout=300s
+kubectl wait --for=condition=ready pods -l app.kubernetes.io/name=cilium-operator -n kube-system --timeout=300s
+echo "✅ Cilium CNI is ready!"
+
+# 2. Install Gateway API CRDs (required for Cilium Gateway)
+echo "📦 Installing Gateway API CRDs (required for Cilium Gateway)..."
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.0/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
+echo "✅ Gateway API CRDs installed"
 
 # 3. Install ArgoCD using Helm (needed to bootstrap the infrastructure applications)
 if ! kubectl get deployment argocd-server -n argocd &>/dev/null; then
@@ -55,88 +65,16 @@ else
     echo "✅ Sealed Secrets controller is already installed"
 fi
 
-# 5. Apply ArgoCD root Application manifest (cluster-init) - this will install Cilium via ArgoCD
+# 5. Apply ArgoCD root Application manifest (cluster-init)
 APP_MANIFEST="$REPO_ROOT/cluster-init/cluster-init.yaml"
 if [ -f "$APP_MANIFEST" ]; then
   echo "\n📦 Applying ArgoCD root Application (cluster-init)..."
   kubectl apply -f "$APP_MANIFEST"
   echo "✅ Applied $APP_MANIFEST"
 
-  echo "⏳ Waiting for cluster-init ArgoCD application to be created..."
-  sleep 10
-
-  echo "🔄 Forcing hard sync of cluster-init application..."
+  echo "🔄 Forcing hard sync of cluster-init application to begin infrastructure deployment..."
   kubectl patch application cluster-init -n argocd --type merge -p '{"spec": {"syncPolicy": {"syncOptions": ["Prune=true", "Replace=true"]}}, "metadata": {"annotations": {"argocd.argoproj.io/sync": "true"}}}'
   echo "✅ Hard sync triggered"
-
-  echo "⏳ Waiting for Cilium to be deployed (checking for cilium pods)..."
-  ATTEMPTS=0
-  MAX_ATTEMPTS=60  # Wait up to 15 minutes (60 attempts * 15s = 900s)
-  while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-    # Check for Cilium pods with the more common label selectors
-    if kubectl get pods -n kube-system -l k8s-app=cilium-agent 2>/dev/null | grep -q "Running\|ContainerCreating" ||
-       kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium 2>/dev/null | grep -q "Running\|ContainerCreating" ||
-       kubectl get pods -n kube-system -l k8s-app=cilium 2>/dev/null | grep -q "Running\|ContainerCreating"; then
-      echo "✅ Found Cilium pods, checking if they're ready..."
-
-      # Check pods with different label selectors
-      CILIUM_PODS=$(kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium --no-headers 2>/dev/null | awk '{print $1}' ||
-                    kubectl get pods -n kube-system -l k8s-app=cilium-agent --no-headers 2>/dev/null | awk '{print $1}' ||
-                    kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | awk '{print $1}')
-
-      if [ -n "$CILIUM_PODS" ]; then
-        ALL_READY=true
-        while IFS= read -r pod; do
-          if [ -n "$pod" ]; then
-            if ! kubectl get pod "$pod" -n kube-system -o jsonpath='{.status.containerStatuses[*].ready}' 2>/dev/null | grep -q "true\|false"; then
-              # Pod might still be initializing
-              ALL_READY=false
-              break
-            else
-              POD_READY_STATUS=$(kubectl get pod "$pod" -n kube-system -o jsonpath='{.status.containerStatuses[*].ready}' 2>/dev/null)
-              if echo "$POD_READY_STATUS" | grep -qv "true"; then
-                ALL_READY=false
-                break
-              fi
-            fi
-          fi
-        done <<< "$(echo "$CILIUM_PODS")"
-
-        if [ "$ALL_READY" = true ]; then
-          echo "✅ All Cilium pods are ready!"
-          break
-        fi
-      fi
-    else
-      echo "⏳ Cilium pods not found yet ($((ATTEMPTS + 1))/$MAX_ATTEMPTS)"
-    fi
-
-    sleep 15
-    ATTEMPTS=$((ATTEMPTS + 1))
-  done
-
-  if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-    echo "⚠️ Warning: Timeout waiting for Cilium to be ready via ArgoCD. Attempting direct Cilium installation..."
-
-    # As a fallback, try installing Cilium directly if ArgoCD is taking too long
-    echo "🔧 Attempting direct Cilium installation..."
-    # Wait a bit more for any ongoing operations to settle
-    sleep 30
-
-    # Check again if Cilium is now running after ArgoCD had more time
-    if kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium 2>/dev/null | grep -q "Running\|ContainerCreating" ||
-       kubectl get pods -n kube-system -l k8s-app=cilium-agent 2>/dev/null | grep -q "Running\|ContainerCreating" ||
-       kubectl get pods -n kube-system -l k8s-app=cilium 2>/dev/null | grep -q "Running\|ContainerCreating"; then
-      echo "✅ Cilium found after additional wait - continuing..."
-    else
-      echo "🔧 Installing Cilium using cilium-cli..."
-      cilium install --version 1.15.3 --namespace kube-system --reuse-values
-      echo "⏳ Waiting for Cilium to become ready after direct installation..."
-      kubectl wait --for=condition=ready pods -l k8s-app=cilium -n kube-system --timeout=300s || echo "⚠️ Cilium direct installation may not have completed successfully."
-    fi
-  else
-    echo "✅ Cilium is ready, continuing with setup..."
-  fi
 else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
@@ -220,6 +158,22 @@ done
 
 if [ $FINAL_ATTEMPTS -eq $FINAL_MAX_ATTEMPTS ]; then
   echo "⚠️  Warning: Could not verify CNI health, but continuing anyway..."
+else
+  echo "✅ CNI is operational, installing required CRDs for infrastructure components..."
+
+  # Install cert-manager CRDs (needed for certificates and cluster issuers)
+  echo "📦 Installing cert-manager CRDs..."
+  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.crds.yaml || echo "⚠️ cert-manager CRDs may already be installed"
+
+  # Install MetalLB CRDs only (needed for IPAddressPool and L2Advertisement)
+  # Do not install the full MetalLB controller as that will be deployed by ArgoCD
+  echo "📦 Installing MetalLB CRDs..."
+  # Install each CRD individually since the combined metallb-crds.yaml might not exist
+  kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.1/config/crd/bases/metallb.io_addresspools.yaml || echo "⚠️ MetalLB AddressPool CRD may already be installed"
+  kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.1/config/crd/bases/metallb.io_l2advertisements.yaml || echo "⚠️ MetalLB L2Advertisement CRD may already be installed"
+  kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.1/config/crd/bases/metallb.io_bgppeers.yaml || echo "⚠️ MetalLB BGPPeer CRD may already be installed"
+
+  echo "✅ Required CRDs installed, infrastructure sync should proceed properly."
 fi
 
 echo "\n🔄 The cluster-init ArgoCD Application will now sync the infrastructure from Git."
