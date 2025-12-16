@@ -43,7 +43,7 @@ else
     echo "✅ ArgoCD is already installed"
 fi
 
-# 5. Install Sealed Secrets Controller (required for secret generation)
+# 4. Install Sealed Secrets Controller (required for secret generation)
 echo "\n🔐 Installing Sealed Secrets Controller (required for secret generation)..."
 if ! kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null; then
     # Install the Sealed Secrets controller directly to enable sealed secret generation
@@ -55,17 +55,88 @@ else
     echo "✅ Sealed Secrets controller is already installed"
 fi
 
-# 6. Apply ArgoCD root Application manifest (cluster-init)
+# 5. Apply ArgoCD root Application manifest (cluster-init) - this will install Cilium via ArgoCD
 APP_MANIFEST="$REPO_ROOT/cluster-init/cluster-init.yaml"
 if [ -f "$APP_MANIFEST" ]; then
   echo "\n📦 Applying ArgoCD root Application (cluster-init)..."
   kubectl apply -f "$APP_MANIFEST"
   echo "✅ Applied $APP_MANIFEST"
-  echo "⏳ Waiting for cluster-init ArgoCD application to be processed..."
+
+  echo "⏳ Waiting for cluster-init ArgoCD application to be created..."
   sleep 10
+
   echo "🔄 Forcing hard sync of cluster-init application..."
   kubectl patch application cluster-init -n argocd --type merge -p '{"spec": {"syncPolicy": {"syncOptions": ["Prune=true", "Replace=true"]}}, "metadata": {"annotations": {"argocd.argoproj.io/sync": "true"}}}'
   echo "✅ Hard sync triggered"
+
+  echo "⏳ Waiting for Cilium to be deployed (checking for cilium pods)..."
+  ATTEMPTS=0
+  MAX_ATTEMPTS=60  # Wait up to 15 minutes (60 attempts * 15s = 900s)
+  while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+    # Check for Cilium pods with the more common label selectors
+    if kubectl get pods -n kube-system -l k8s-app=cilium-agent 2>/dev/null | grep -q "Running\|ContainerCreating" ||
+       kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium 2>/dev/null | grep -q "Running\|ContainerCreating" ||
+       kubectl get pods -n kube-system -l k8s-app=cilium 2>/dev/null | grep -q "Running\|ContainerCreating"; then
+      echo "✅ Found Cilium pods, checking if they're ready..."
+
+      # Check pods with different label selectors
+      CILIUM_PODS=$(kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium --no-headers 2>/dev/null | awk '{print $1}' ||
+                    kubectl get pods -n kube-system -l k8s-app=cilium-agent --no-headers 2>/dev/null | awk '{print $1}' ||
+                    kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | awk '{print $1}')
+
+      if [ -n "$CILIUM_PODS" ]; then
+        ALL_READY=true
+        while IFS= read -r pod; do
+          if [ -n "$pod" ]; then
+            if ! kubectl get pod "$pod" -n kube-system -o jsonpath='{.status.containerStatuses[*].ready}' 2>/dev/null | grep -q "true\|false"; then
+              # Pod might still be initializing
+              ALL_READY=false
+              break
+            else
+              POD_READY_STATUS=$(kubectl get pod "$pod" -n kube-system -o jsonpath='{.status.containerStatuses[*].ready}' 2>/dev/null)
+              if echo "$POD_READY_STATUS" | grep -qv "true"; then
+                ALL_READY=false
+                break
+              fi
+            fi
+          fi
+        done <<< "$(echo "$CILIUM_PODS")"
+
+        if [ "$ALL_READY" = true ]; then
+          echo "✅ All Cilium pods are ready!"
+          break
+        fi
+      fi
+    else
+      echo "⏳ Cilium pods not found yet ($((ATTEMPTS + 1))/$MAX_ATTEMPTS)"
+    fi
+
+    sleep 15
+    ATTEMPTS=$((ATTEMPTS + 1))
+  done
+
+  if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+    echo "⚠️ Warning: Timeout waiting for Cilium to be ready via ArgoCD. Attempting direct Cilium installation..."
+
+    # As a fallback, try installing Cilium directly if ArgoCD is taking too long
+    echo "🔧 Attempting direct Cilium installation..."
+    # Wait a bit more for any ongoing operations to settle
+    sleep 30
+
+    # Check again if Cilium is now running after ArgoCD had more time
+    if kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium 2>/dev/null | grep -q "Running\|ContainerCreating" ||
+       kubectl get pods -n kube-system -l k8s-app=cilium-agent 2>/dev/null | grep -q "Running\|ContainerCreating" ||
+       kubectl get pods -n kube-system -l k8s-app=cilium 2>/dev/null | grep -q "Running\|ContainerCreating"; then
+      echo "✅ Cilium found after additional wait - continuing..."
+    else
+      echo "🔧 Installing Cilium using cilium-cli..."
+      cilium install --version 1.15.3 --namespace kube-system --reuse-values
+      echo "⏳ Waiting for Cilium to become ready after direct installation..."
+      kubectl wait --for=condition=ready pods -l k8s-app=cilium -n kube-system --timeout=300s || echo "⚠️ Cilium direct installation may not have completed successfully."
+    fi
+  else
+    echo "✅ Cilium is ready, continuing with setup..."
+  fi
 else
   echo "⚠️  $APP_MANIFEST not found, skipping ArgoCD root Application apply."
 fi
@@ -118,6 +189,37 @@ if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
 else
   echo "❌ Aborted by user. No changes committed."
   exit 1
+fi
+
+# Final CNI health check to ensure cluster networking is operational
+echo "\n🔄 Performing final CNI health check..."
+FINAL_ATTEMPTS=0
+FINAL_MAX_ATTEMPTS=20
+while [ $FINAL_ATTEMPTS -lt $FINAL_MAX_ATTEMPTS ]; do
+  # Check if kubectl can communicate with the cluster and pods can be listed
+  if kubectl get pods -n kube-system --no-headers 2>/dev/null | grep -q "cilium\|calico\|flannel\|weave"; then
+    CNI_READY=true
+    # Check if there are any pods in ContainerCreating state for too long
+    CONTAINER_CREATING_COUNT=$(kubectl get pods --all-namespaces --field-selector=status.phase=Pending -o json | jq '.items | length' 2>/dev/null || echo "0")
+    if [ "$CONTAINER_CREATING_COUNT" -gt 5 ]; then  # More than 5 pods stuck in Pending is concerning
+      CNI_READY=false
+      echo "⚠️  Found $CONTAINER_CREATING_COUNT pods stuck in Pending state, waiting..."
+    fi
+
+    if [ "$CNI_READY" = true ]; then
+      echo "✅ CNI appears healthy, all systems go!"
+      break
+    fi
+  else
+    echo "⏳ Waiting for CNI to be operational..."
+  fi
+
+  sleep 10
+  FINAL_ATTEMPTS=$((FINAL_ATTEMPTS + 1))
+done
+
+if [ $FINAL_ATTEMPTS -eq $FINAL_MAX_ATTEMPTS ]; then
+  echo "⚠️  Warning: Could not verify CNI health, but continuing anyway..."
 fi
 
 echo "\n🔄 The cluster-init ArgoCD Application will now sync the infrastructure from Git."
