@@ -13,6 +13,9 @@ spec:
     privateKeySecretRef:
       name: letsencrypt-prod-private-key
     solvers:
-    - selector: {}
-
+    - http01:
+        gatewayHTTPRoute:
+          parentRefs:
+          - name: external-gateway
+            namespace: gateway-system
 {{- end }}
